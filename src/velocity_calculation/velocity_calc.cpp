@@ -3,7 +3,19 @@
 #include "../FMM/fmm3D.hpp"
 #include "velocity_biot_savart.hpp"
 
-#define VELOCITY_CALC_TYPE 2
+/** The type of 2D simulation FMM calculation
+ *   [1] : Old fashion code
+ *   [2] : New code using tree code built in unordered map of cell pointer
+*/
+#define VELOCITY_2D_TYPE 2
+
+/** The type of 3D simulation FMM calculation
+ *   [1] : Refactor of old code (tree data built in vector, turns out to be 1.5 times faster)
+ *   [2] : New code using tree code built in unordered map of cell pointer
+*/
+#define VELOCITY_3D_TYPE 2
+
+#define ALL_PARTICLE true	// Code construction is still on going
 
 /**
  *  @brief Velocity calculation manager.
@@ -22,23 +34,25 @@ void VelocityCalc::get_velocity(Particle &p, const int step)
 	double _time;
 	_time = omp_get_wtime();
 
+	// **Calculate the rotational part
 	if (DIM == 2){
 		// Resize the velocity of particle
 		p.u.clear(); p.u.resize(p.num,0.0e0);
 		p.v.clear(); p.v.resize(p.num,0.0e0);
 
-		// Old velocity calculation type
-		if (VELOCITY_CALC_TYPE == 1){
+		// Old fashing FMM code of velocity calculation
+		if (VELOCITY_2D_TYPE == 1){
 			printf("%s<+> Type 1: Old based velocity calculation %s\n", FONT_CYAN, FONT_RESET);
 			this->velocity_old(p, step);
 		}
 
 		// FMM based velocity calculation
-		else if (VELOCITY_CALC_TYPE == 2){
-			printf("%s<+> Type 2: FMM based velocity calculation %s\n", FONT_CYAN, FONT_RESET);
+		else if (VELOCITY_2D_TYPE == 2){
+			printf("%s<+> Type 2: Unordered map tree cell pointer %s\n", FONT_CYAN, FONT_RESET);
 			this->velocity_fmm_2d(p, step);
 		}
 	}
+
 	else if (DIM == 3){
 		// Resize the velocity of particle
 		p.u.clear(); p.u.resize(p.num,0.0e0);
@@ -46,14 +60,20 @@ void VelocityCalc::get_velocity(Particle &p, const int step)
 		p.w.clear(); p.w.resize(p.num,0.0e0);
 
 		// FMM based velocity calculation
-		if (VELOCITY_CALC_TYPE == 2){
-			printf("%s<+> Type 2: FMM based velocity calculation %s\n", FONT_CYAN, FONT_RESET);
+		if (VELOCITY_3D_TYPE == 1){
+			printf("%s<+> Type 1: Vector tree cell data %s\n", FONT_CYAN, FONT_RESET);
+			this->velocity_fmm_3d_fast(p, step);
+		}
+
+		// FMM based velocity calculation
+		else if (VELOCITY_3D_TYPE == 2){
+			printf("%s<+> Type 2: Unordered map tree cell pointer %s\n", FONT_CYAN, FONT_RESET);
 			this->velocity_fmm_3d(p, step);
-			// this->velocity_fmm_3d_fast(p, step);
 		}
 	}
 	
-
+	
+	// **Calculate the irrotational part
 	// Helmholtz decomposition (u = u_rot + u_irrot)
 	printf("<+> Adding the irrotational velocity term \n");
 	printf("    [helmholtz backward decomposition]\n");
@@ -79,9 +99,9 @@ void VelocityCalc::get_velocity(Particle &p, const int step)
 
 
 // =====================================================
-// +-------------- Private Method Region --------------+
+// +------------- VELOCITY CALCULATOR 2D --------------+
 // =====================================================
-// #pragma region PRIVATE_METHOD
+// #pragma region VELOCITY_2D
 
 /**
  *  @brief Old velocity calculation. <!> Please check to any reference <!>.
@@ -91,19 +111,18 @@ void VelocityCalc::get_velocity(Particle &p, const int step)
  *  @param  _step  The current simulation iteration.
  */
 void VelocityCalc::velocity_old(Particle &p, const int step){
-	// -- internal variables
-	const static int n_inter = 1; // ! change into class static variables
-	std::vector<int> _index;
-
-	Particle _particle;		  // store current active particles box (to increase robustness)
-	Particle _particleDense;  // store particle with core size as smallest from current active particles
+	// Internal variables
+	std::vector<int> _index;	// The original index container
+	Particle _particle;		  	// store current active particles box (to increase robustness)
+	Particle _particleDense;  	// store particle with core size as smallest from current active particles
+	
+	// Initialize the 
 	_particle.num = 0;
 	_particleDense.num = 0;
 
-	velocity_biot_savart FMM;
 	
-	// TODO: store current active particles (Ngga efficient)
-	for (size_t i = 0; i < p.num; i++){
+	// TODO: store current active particles
+	for (int i = 0; i < p.num; i++){
 		//if (p.isActive[i] == true){
 			_particle.x.push_back(p.x[i]);
 			_particle.y.push_back(p.y[i]);
@@ -112,6 +131,7 @@ void VelocityCalc::velocity_old(Particle &p, const int step){
 			_particle.u.push_back(0.0e0);
 			_particle.v.push_back(0.0e0);
 			_index.push_back(i);
+
 			_particle.num++;
 			_particleDense.x.push_back(p.x[i]);
 			_particleDense.y.push_back(p.y[i]);
@@ -123,42 +143,27 @@ void VelocityCalc::velocity_old(Particle &p, const int step){
 		//}
 	}
 
-
-	// TODO: calculate FMM by calling Fortran subroutine
-	// := begin
-	int np = _particle.num;
-	double *x = new double[_particle.num];
-	double *y = new double[_particle.num];
-	double *s = new double[_particle.num];
-	double *gz = new double[_particle.num];
-	double *u = new double[_particle.num];
-	double *v = new double[_particle.num];
-
-	int _n0 = 1;
+	// The tools for FMM calculation
+	velocity_biot_savart FMM;
+	
+	// Define the parameter for FMM calculation
 	int _iCutoff = Pars::icutoff;
 	int _nS = Pars::n_s;
-	int _nInter = n_inter;
+	int _nInter = 1;
 	int _ndp = Pars::ndp;
 	
 	FMM.biotsavart_fmm_2d( _particle, _particleDense,  _iCutoff, _nS,  _nInter,  _ndp);
 	//FMM.biotsavart_direct_2d(_particle, _particleDense);
 
-	// update base particle velocity
-	// Dapetnya kecepatan
-	for (size_t i = 0; i < _particle.num; i++)
-	{
-		int _isActiveIndex = _index[i];
-		p.u[_isActiveIndex] = _particle.u[i];
-		p.v[_isActiveIndex] = _particle.v[i];
+	// Update base particle velocity
+	for (int i = 0; i < _particle.num; i++){
+		// Alias to the original index
+		const int &ori_ID = _index[i];
+		p.u[ori_ID] = _particle.u[i];
+		p.v[ori_ID] = _particle.v[i];
 	}
 
-	delete[] x;
-	delete[] y;
-	delete[] s;
-	delete[] gz;
-	delete[] u;
-	delete[] v;
-
+	return;
 }
 
 /**
@@ -242,6 +247,12 @@ void VelocityCalc::velocity_fmm_2d(Particle &p, const int step){
 	return;
 }
 
+// #pragma endregion
+
+// =====================================================
+// +------------- VELOCITY CALCULATOR 3D --------------+
+// =====================================================
+// #pragma region VELOCITY_3D
 
 /**
  *  @brief FMM based velocity calculation.
@@ -259,7 +270,7 @@ void VelocityCalc::velocity_fmm_3d(Particle &p, const int step){
     */
 
    	// The marker to calculate near body particle only or all particle
-	bool calcAllParticle = false;
+	bool calcAllParticle = ALL_PARTICLE;
 	if (step % Pars::step_inv == 0){
 		calcAllParticle = true;
 	}
@@ -457,8 +468,8 @@ void VelocityCalc::velocity_fmm_3d_fast(Particle &p, const int step){
        4. Update the particle data
     */
 
-   	// The marker to calculate near body particle only or all particle
-	bool calcAllParticle = false;
+   	// The marker to calculate near body particle only or all particle [Actually is not yet implemented]
+	bool calcAllParticle = ALL_PARTICLE;
 	if (step % Pars::step_inv == 0){
 		calcAllParticle = true;
 	}
@@ -551,7 +562,7 @@ void VelocityCalc::velocity_fmm_3d_fast(Particle &p, const int step){
 	}
 	
 	
-	// PROCEDURE 3: Calculate the velocity (by FMM)
+	// PROCEDURE 2: Calculate the velocity (by FMM)
     // ********************************************************************
 	// The FMM operator class
 	fmm3D FMM_tool;
@@ -563,25 +574,6 @@ void VelocityCalc::velocity_fmm_3d_fast(Particle &p, const int step){
 	std::vector<double> yVelocity = FMM_tool.get_Field_y();
 	std::vector<double> zVelocity = FMM_tool.get_Field_z();
 	
-	// // Calculate the x direction stream function (psi) by FMM accelerated method
-	// printf("\nCalculate stream function in x direction ... \n");
-	// FMM_tool.calcField(this->treeData, particle_POS, active_mark, particle_SRC_x);
-	// std::vector<double> dPSIx_dy = FMM_tool.get_Field_y();
-	// std::vector<double> dPSIx_dz = FMM_tool.get_Field_z();
-
-	// // Calculate the x direction stream function (psi) by FMM accelerated method
-	// printf("\nCalculate stream function in y direction ... \n");
-	// FMM_tool.calcField(this->treeData, particle_POS, active_mark, particle_SRC_y);
-	// std::vector<double> dPSIy_dx = FMM_tool.get_Field_x();
-	// std::vector<double> dPSIy_dz = FMM_tool.get_Field_z();
-
-	// // Calculate the x direction stream function (psi) by FMM accelerated method
-	// printf("\nCalculate stream function in z direction ... \n");
-	// FMM_tool.calcField(this->treeData, particle_POS, active_mark, particle_SRC_z);
-	// std::vector<double> dPSIz_dx = FMM_tool.get_Field_x();
-	// std::vector<double> dPSIz_dy = FMM_tool.get_Field_y();
-
-	
 	// PROCEDURE 4: Update the particle velocity
     // ********************************************************************
 	// Update the velocity (curl of stream function PSI)
@@ -592,11 +584,6 @@ void VelocityCalc::velocity_fmm_3d_fast(Particle &p, const int step){
 			p.u[i] = xVelocity[i];
 			p.v[i] = yVelocity[i];
 			p.w[i] = zVelocity[i];
-
-			// // Single calculation
-			// p.u[i] = dPSIz_dy[i] - dPSIy_dz[i];
-			// p.v[i] = dPSIx_dz[i] - dPSIz_dx[i];
-			// p.w[i] = dPSIy_dx[i] - dPSIx_dy[i];
 		}
 	}
 	else{

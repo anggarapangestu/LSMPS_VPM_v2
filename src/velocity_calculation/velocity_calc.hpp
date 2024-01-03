@@ -16,12 +16,12 @@ private:
 	// Internal Variable
 	TreeCell treeData;		// The basis of tree data of poisson solver [@param lifetime: throughout simulation]
 
-	// Velocity manager
+	// Velocity calculation
 
-	void velocity_fmm_2d(Particle &_particle, const int _step);
-	void velocity_fmm_3d(Particle &_particle, const int _step);
-	void velocity_fmm_3d_fast(Particle &_particle, const int _step);
 	void velocity_old(Particle &_particle, const int _step);
+	void velocity_fmm_2d(Particle &_particle, const int _step);
+	void velocity_fmm_3d_fast(Particle &_particle, const int _step);
+	void velocity_fmm_3d(Particle &_particle, const int _step);
 
 public:
 	// Velocity manager

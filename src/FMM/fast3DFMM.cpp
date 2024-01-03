@@ -1,8 +1,34 @@
 #include "fast3DFMM.hpp"
 #include "fmm3D.hpp"
 
-#define SUPPORT_RADIUS_SCALE 1
+#define SUPPORT_RADIUS_FACTOR 2.0
+/** NOTE: The support radius
+ *   ______________    DESC:
+ *  | . '|    |' . |    > The center cell X: have support region of circle with radius
+ *  |'___|____|___'|       of SUPPORT_RADIUS_FACTOR multiplied by its length
+ *  |    |[X:]|    |    > The particle inside the support region will use direct
+ *  |____|____|____|       calculation to each source particle inside the cell
+ *  |.   |    |   .|    > Otherwise, the particle outside it will use multipole
+ *  |_'_.|____|._'_|
+ * 
+ *  ADD: 
+ *   > From fast observation a lower SUPPORT_RADIUS_FACTOR will have faster calculation
+ *   > A value of 1 show a quite fast but yield worse <?>
+ *   > A value of 2 have longer computation but accurate (The best value)
+ *   > A value of 1.5 is just right (by fast observation - not so fast, at moderate time the velocity field accuracy is getting less)
+*/
 
+/**
+ *  @brief  Calculate the velocity field using FMM method, faster using a fast cell.
+ *  NOTE: FMM calculation use a cell built in vector instead of unordered map. (which means faster calculation)
+ *
+ *  @param  _parPos   List of particle position.
+ *  @param  _activeFlag List of particle active mark.
+ *  @param  _targetFlag List of particle target mark.
+ *  @param  _alphaX   The particle vortex strength in x direction.
+ *  @param  _alphaY   The particle vortex strength in y direction.
+ *  @param  _alphaZ   The particle vortex strength in z direction.
+*/
 void fmm3D::calcVelocityFast(const std::vector<std::vector<double>> &_parPos, 
                              const std::vector<bool> &_activeFlag,
                              const std::vector<bool> &_targetFlag,
@@ -17,12 +43,24 @@ void fmm3D::calcVelocityFast(const std::vector<std::vector<double>> &_parPos,
      *   [2] Calculate multipole of P2M and upward sweep of M2M
      *   [3] Evaluate the FMM (*direct and farfield of M2P)
     */
+    
+    // Time manager
+    double timer = omp_get_wtime();
 
     // PROCEDURE 1:
     // ***********
     // Generate the tree data
+
     FMMCell treeData;
     treeData.generateTree(_parPos, _activeFlag);
+
+    timer = omp_get_wtime() - timer;
+	printf("<+> Tree finished in : %f s\n", timer);
+    
+    MESSAGE_LOG << "The support radius factor : " << SUPPORT_RADIUS_FACTOR << "\n";
+
+    // treeData.save_all_tree(treeData, "test");
+    // treeData.save_leaf_tree(treeData, "test");
 
     // PROCEDURE 2:
     // ***********
@@ -41,7 +79,65 @@ void fmm3D::calcVelocityFast(const std::vector<std::vector<double>> &_parPos,
 }
 
 
-// MULTIPOLE CALCULATION SECTION
+// =====================================================
+// +-------------- Fast Multipole Method --------------+
+// =====================================================
+// #pragma region FMM_CALCULATION
+
+/**
+ *  @brief  Calculation of velocity field using FMM method using the fast cell.
+ *         
+ *  @param  _treeData The cell tree data structure for data manager tools in 
+ *  calculating FMM.
+ *  @param  _parPos   List of particle position.
+ *  @param  _activeFlag List of particle active mark.
+ *  @param  _targetFlag List of particle target mark.
+ *  @param  _alphaX   The particle vortex strength in x direction.
+ *  @param  _alphaY   The particle vortex strength in y direction.
+ *  @param  _alphaZ   The particle vortex strength in z direction.
+*/
+void fastFMM3Dutils::velocityCalc(const FMMCell &treeData, 
+            const std::vector<std::vector<double>> &_parPos, 
+            const std::vector<bool> &_activeFlag,
+            const std::vector<bool> &_targetFlag,
+            const std::vector<double> &_alphaX,
+            const std::vector<double> &_alphaY,
+            const std::vector<double> &_alphaZ)
+{
+    // Time management
+    double timer;
+
+    // Resize the multipole data before calculation
+    this->m_Vx = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
+    this->m_Vy = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
+    this->m_Vz = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
+
+    // **Calculate multipole
+    this->multipoleCalc(treeData, _parPos, _activeFlag, _alphaX, _alphaY, _alphaZ);
+
+    // **Calculate velocity
+    timer = omp_get_wtime();
+
+    this->evaluateFMM(treeData, _parPos, _activeFlag, _targetFlag, _alphaX, _alphaY, _alphaZ);
+
+    timer = omp_get_wtime() - timer;
+    printf("<+> FMM Procedure 3 [FMM]  : %f s\n", timer);
+
+    return;
+}
+
+
+/**
+ *  @brief  Calculate the cell multipole of P2M and M2M.
+ *         
+ *  @param  _treeData The cell tree data structure for data manager tools in 
+ *  calculating FMM.
+ *  @param  _parPos   List of particle position.
+ *  @param  _activeFlag List of particle active mark.
+ *  @param  _alphaX   The particle vortex strength in x direction.
+ *  @param  _alphaY   The particle vortex strength in y direction.
+ *  @param  _alphaZ   The particle vortex strength in z direction.
+*/
 void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData, 
             const std::vector<std::vector<double>> &parPos, 
             const std::vector<bool> &activeMark,
@@ -49,12 +145,11 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
             const std::vector<double> &alphaY,
             const std::vector<double> &alphaZ)
 {
-    // Calculate the multipole of all cell
-    // Resize the multipole data before calculation
-    this->m_Vx = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
-    this->m_Vy = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
-    this->m_Vz = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
+    // Time counter
+    double timer;
+    timer = omp_get_wtime();
 
+    fmm3D FMM3D_tools;
     
     // SECTION 1:
     // *********
@@ -64,8 +159,8 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
     #pragma omp parallel for
     for (int cellID = 0; cellID < treeData.cellNum; cellID++){
         // Only calculate the leaf cell
-        // if (treeData.nPar[cellID] >= treeData.critNum) continue;    // Leaf cell have particle less than critNum
-        if (treeData.chdFlag[cellID] != 0) continue;                // Leaf cell have no child
+        if (treeData.nPar[cellID] >= treeData.critNum) continue;    // Leaf cell have particle less than critNum
+        // if (treeData.chdFlag[cellID] != 0) continue;                // Leaf cell have no child
 
         // Only calculate active cell
         if (treeData.isActive[cellID] == false) continue;
@@ -84,55 +179,37 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
             double dz = treeData.zc[cellID] - parPos[parID][2];
 
             // Calculate the multipole for x vorticity source
-            this->m_Vx.at(cellID)[0] += alphaX[parID];                   // 0th order    (0,0,0)
-            this->m_Vx.at(cellID)[1] += alphaX[parID] * dx;              // 1st order x  (1,0,0)
-            this->m_Vx.at(cellID)[2] += alphaX[parID] * dy;              // 1st order y  (0,1,0)
-            this->m_Vx.at(cellID)[3] += alphaX[parID] * dz;              // 1st order z  (0,0,1)
-            this->m_Vx.at(cellID)[4] += alphaX[parID] * dx * dx * 0.5;   // 2nd order x  (2,0,0)
-            this->m_Vx.at(cellID)[5] += alphaX[parID] * dy * dy * 0.5;   // 2nd order y  (0,2,0)
-            this->m_Vx.at(cellID)[6] += alphaX[parID] * dz * dz * 0.5;   // 2nd order z  (0,0,2)
-            this->m_Vx.at(cellID)[7] += alphaX[parID] * dx * dy;         // 1st x 1st y  (1,1,0)
-            this->m_Vx.at(cellID)[8] += alphaX[parID] * dy * dz;         // 1st y 1st z  (0,1,1)
-            this->m_Vx.at(cellID)[9] += alphaX[parID] * dx * dz;         // 1st x 1st z  (1,0,1)
+            FMM3D_tools.P2M_calc(this->m_Vx.at(cellID), alphaX[parID], dx, dy, dz);
 
             // Calculate the multipole for y vorticity source
-            this->m_Vy.at(cellID)[0] += alphaY[parID];                   // 0th order    (0,0,0)
-            this->m_Vy.at(cellID)[1] += alphaY[parID] * dx;              // 1st order x  (1,0,0)
-            this->m_Vy.at(cellID)[2] += alphaY[parID] * dy;              // 1st order y  (0,1,0)
-            this->m_Vy.at(cellID)[3] += alphaY[parID] * dz;              // 1st order z  (0,0,1)
-            this->m_Vy.at(cellID)[4] += alphaY[parID] * dx * dx * 0.5;   // 2nd order x  (2,0,0)
-            this->m_Vy.at(cellID)[5] += alphaY[parID] * dy * dy * 0.5;   // 2nd order y  (0,2,0)
-            this->m_Vy.at(cellID)[6] += alphaY[parID] * dz * dz * 0.5;   // 2nd order z  (0,0,2)
-            this->m_Vy.at(cellID)[7] += alphaY[parID] * dx * dy;         // 1st x 1st y  (1,1,0)
-            this->m_Vy.at(cellID)[8] += alphaY[parID] * dy * dz;         // 1st y 1st z  (0,1,1)
-            this->m_Vy.at(cellID)[9] += alphaY[parID] * dx * dz;         // 1st x 1st z  (1,0,1)
+            FMM3D_tools.P2M_calc(this->m_Vy.at(cellID), alphaY[parID], dx, dy, dz);
 
             // Calculate the multipole for z vorticity source
-            this->m_Vz.at(cellID)[0] += alphaZ[parID];                   // 0th order    (0,0,0)
-            this->m_Vz.at(cellID)[1] += alphaZ[parID] * dx;              // 1st order x  (1,0,0)
-            this->m_Vz.at(cellID)[2] += alphaZ[parID] * dy;              // 1st order y  (0,1,0)
-            this->m_Vz.at(cellID)[3] += alphaZ[parID] * dz;              // 1st order z  (0,0,1)
-            this->m_Vz.at(cellID)[4] += alphaZ[parID] * dx * dx * 0.5;   // 2nd order x  (2,0,0)
-            this->m_Vz.at(cellID)[5] += alphaZ[parID] * dy * dy * 0.5;   // 2nd order y  (0,2,0)
-            this->m_Vz.at(cellID)[6] += alphaZ[parID] * dz * dz * 0.5;   // 2nd order z  (0,0,2)
-            this->m_Vz.at(cellID)[7] += alphaZ[parID] * dx * dy;         // 1st x 1st y  (1,1,0)
-            this->m_Vz.at(cellID)[8] += alphaZ[parID] * dy * dz;         // 1st y 1st z  (0,1,1)
-            this->m_Vz.at(cellID)[9] += alphaZ[parID] * dx * dz;         // 1st x 1st z  (1,0,1)
+            FMM3D_tools.P2M_calc(this->m_Vz.at(cellID), alphaZ[parID], dx, dy, dz);
+        
         }
     }
+
+    // Management of timer
+    timer = omp_get_wtime() - timer;
+    printf("<+> FMM Procedure 1 [ME]   : %f s\n", timer);
+
 
     // SECTION 2:
     // *********
     // Calculate the multipole to multipole at each cell from child cell
     // Iterates through level
+    timer = omp_get_wtime();
     for (int level = treeData.maxLevel - 1; level > 0; level --){
         // Iterate from one level above maximum level
         // Alias to the begining and end of cellID at the current level
         int beginID = treeData.startID[level];
         int endID = treeData.startID[level+1];
 
+        // std::cout << "Start ID at level " << level << " is " << beginID << "\n";
+
         // Iterate through all cell in the current level
-        #pragma omp parallel for
+        // #pragma omp parallel for     /* This make calculation get wrong at low resolution level, idk but maybe the problem is caused by less of iteration than the core number*/
         for (int cellID = beginID; cellID < endID; cellID++){
             // Only calculte M2M for cell with child
             
@@ -140,8 +217,8 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
             if (treeData.isActive[cellID] == false) continue;
 
             // Skip if current cell is a leaf cell
-            // if (treeData.nPar[cellID] < treeData.critNum) continue;    // Leaf cell have particle less than critNum
-            if (treeData.chdFlag[cellID] == 0) continue;               // Leaf cell have no child
+            if (treeData.nPar[cellID] < treeData.critNum) continue;    // Leaf cell have particle less than critNum
+            // if (treeData.chdFlag[cellID] == 0) continue;               // Leaf cell have no child
 
             // Calculate the local source sum (ak) using M2M from each child
             for (int octant = 0; octant < treeData.chdNum; octant++){
@@ -157,48 +234,38 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
                 double dz = treeData.zc[cellID] - treeData.zc[chdID];
 
                 // Calculate the multipole translation for x vorticity
-                this->m_Vx.at(cellID)[0] += this->m_Vx.at(chdID)[0];                        // 0th order    (0,0,0)
-                this->m_Vx.at(cellID)[1] += this->m_Vx.at(chdID)[1] +  this->m_Vx.at(chdID)[0] * dx;   // 1st order x  (1,0,0)
-                this->m_Vx.at(cellID)[2] += this->m_Vx.at(chdID)[2] +  this->m_Vx.at(chdID)[0] * dy;   // 1st order y  (0,1,0)
-                this->m_Vx.at(cellID)[3] += this->m_Vx.at(chdID)[3] +  this->m_Vx.at(chdID)[0] * dz;   // 1st order z  (0,0,1)
-                this->m_Vx.at(cellID)[4] += this->m_Vx.at(chdID)[4] + (this->m_Vx.at(chdID)[0] * dx * dx * 0.5) + (this->m_Vx.at(chdID)[1] * dx);   // 2nd order x  (2,0,0)
-                this->m_Vx.at(cellID)[5] += this->m_Vx.at(chdID)[5] + (this->m_Vx.at(chdID)[0] * dy * dy * 0.5) + (this->m_Vx.at(chdID)[2] * dy);   // 2nd order y  (0,2,0)
-                this->m_Vx.at(cellID)[6] += this->m_Vx.at(chdID)[6] + (this->m_Vx.at(chdID)[0] * dz * dz * 0.5) + (this->m_Vx.at(chdID)[3] * dz);   // 2nd order z  (0,0,2)
-                this->m_Vx.at(cellID)[7] += this->m_Vx.at(chdID)[7] + (this->m_Vx.at(chdID)[0] * dx * dy)       + (this->m_Vx.at(chdID)[1] * dy) + (this->m_Vx.at(chdID)[2] * dx);    // 1st x 1st y  (1,1,0)
-                this->m_Vx.at(cellID)[8] += this->m_Vx.at(chdID)[8] + (this->m_Vx.at(chdID)[0] * dy * dz)       + (this->m_Vx.at(chdID)[2] * dz) + (this->m_Vx.at(chdID)[3] * dy);    // 1st y 1st z  (0,1,1)
-                this->m_Vx.at(cellID)[9] += this->m_Vx.at(chdID)[9] + (this->m_Vx.at(chdID)[0] * dx * dz)       + (this->m_Vx.at(chdID)[1] * dz) + (this->m_Vx.at(chdID)[3] * dx);    // 1st x 1st z  (1,0,1)
+                FMM3D_tools.M2M_calc(this->m_Vx.at(cellID), this->m_Vx.at(chdID), dx, dy, dz);
 
                 // Calculate the multipole translation for y vorticity
-                this->m_Vy.at(cellID)[0] += this->m_Vy.at(chdID)[0];                        // 0th order    (0,0,0)
-                this->m_Vy.at(cellID)[1] += this->m_Vy.at(chdID)[1] +  this->m_Vy.at(chdID)[0] * dx;   // 1st order x  (1,0,0)
-                this->m_Vy.at(cellID)[2] += this->m_Vy.at(chdID)[2] +  this->m_Vy.at(chdID)[0] * dy;   // 1st order y  (0,1,0)
-                this->m_Vy.at(cellID)[3] += this->m_Vy.at(chdID)[3] +  this->m_Vy.at(chdID)[0] * dz;   // 1st order z  (0,0,1)
-                this->m_Vy.at(cellID)[4] += this->m_Vy.at(chdID)[4] + (this->m_Vy.at(chdID)[0] * dx * dx * 0.5) + (this->m_Vy.at(chdID)[1] * dx);   // 2nd order x  (2,0,0)
-                this->m_Vy.at(cellID)[5] += this->m_Vy.at(chdID)[5] + (this->m_Vy.at(chdID)[0] * dy * dy * 0.5) + (this->m_Vy.at(chdID)[2] * dy);   // 2nd order y  (0,2,0)
-                this->m_Vy.at(cellID)[6] += this->m_Vy.at(chdID)[6] + (this->m_Vy.at(chdID)[0] * dz * dz * 0.5) + (this->m_Vy.at(chdID)[3] * dz);   // 2nd order z  (0,0,2)
-                this->m_Vy.at(cellID)[7] += this->m_Vy.at(chdID)[7] + (this->m_Vy.at(chdID)[0] * dx * dy)       + (this->m_Vy.at(chdID)[1] * dy) + (this->m_Vy.at(chdID)[2] * dx);    // 1st x 1st y  (1,1,0)
-                this->m_Vy.at(cellID)[8] += this->m_Vy.at(chdID)[8] + (this->m_Vy.at(chdID)[0] * dy * dz)       + (this->m_Vy.at(chdID)[2] * dz) + (this->m_Vy.at(chdID)[3] * dy);    // 1st y 1st z  (0,1,1)
-                this->m_Vy.at(cellID)[9] += this->m_Vy.at(chdID)[9] + (this->m_Vy.at(chdID)[0] * dx * dz)       + (this->m_Vy.at(chdID)[1] * dz) + (this->m_Vy.at(chdID)[3] * dx);    // 1st x 1st z  (1,0,1)
+                FMM3D_tools.M2M_calc(this->m_Vy.at(cellID), this->m_Vy.at(chdID), dx, dy, dz);
 
                 // Calculate the multipole translation for z vorticity
-                this->m_Vz.at(cellID)[0] += this->m_Vz.at(chdID)[0];                        // 0th order    (0,0,0)
-                this->m_Vz.at(cellID)[1] += this->m_Vz.at(chdID)[1] +  this->m_Vz.at(chdID)[0] * dx;   // 1st order x  (1,0,0)
-                this->m_Vz.at(cellID)[2] += this->m_Vz.at(chdID)[2] +  this->m_Vz.at(chdID)[0] * dy;   // 1st order y  (0,1,0)
-                this->m_Vz.at(cellID)[3] += this->m_Vz.at(chdID)[3] +  this->m_Vz.at(chdID)[0] * dz;   // 1st order z  (0,0,1)
-                this->m_Vz.at(cellID)[4] += this->m_Vz.at(chdID)[4] + (this->m_Vz.at(chdID)[0] * dx * dx * 0.5) + (this->m_Vz.at(chdID)[1] * dx);   // 2nd order x  (2,0,0)
-                this->m_Vz.at(cellID)[5] += this->m_Vz.at(chdID)[5] + (this->m_Vz.at(chdID)[0] * dy * dy * 0.5) + (this->m_Vz.at(chdID)[2] * dy);   // 2nd order y  (0,2,0)
-                this->m_Vz.at(cellID)[6] += this->m_Vz.at(chdID)[6] + (this->m_Vz.at(chdID)[0] * dz * dz * 0.5) + (this->m_Vz.at(chdID)[3] * dz);   // 2nd order z  (0,0,2)
-                this->m_Vz.at(cellID)[7] += this->m_Vz.at(chdID)[7] + (this->m_Vz.at(chdID)[0] * dx * dy)       + (this->m_Vz.at(chdID)[1] * dy) + (this->m_Vz.at(chdID)[2] * dx);    // 1st x 1st y  (1,1,0)
-                this->m_Vz.at(cellID)[8] += this->m_Vz.at(chdID)[8] + (this->m_Vz.at(chdID)[0] * dy * dz)       + (this->m_Vz.at(chdID)[2] * dz) + (this->m_Vz.at(chdID)[3] * dy);    // 1st y 1st z  (0,1,1)
-                this->m_Vz.at(cellID)[9] += this->m_Vz.at(chdID)[9] + (this->m_Vz.at(chdID)[0] * dx * dz)       + (this->m_Vz.at(chdID)[1] * dz) + (this->m_Vz.at(chdID)[3] * dx);    // 1st x 1st z  (1,0,1)
+                FMM3D_tools.M2M_calc(this->m_Vz.at(cellID), this->m_Vz.at(chdID), dx, dy, dz);
             }
         }
-    }
+    }    
+    
+    // Management of timer
+    timer = omp_get_wtime() - timer;
+    printf("<+> FMM Procedure 2 [M2M]  : %f s\n", timer);
     
     return;
 }
 
 
+/**
+ *  @brief  Calculate the velocity field by FMM multipole for farfield source and
+ *  direct calculation for near source.
+ *         
+ *  @param  _treeData The cell tree data structure for data manager tools in 
+ *  calculating FMM.
+ *  @param  _parPos   List of particle position.
+ *  @param  _activeFlag List of particle active mark.
+ *  @param  _targetFlag List of particle target mark.
+ *  @param  _alphaX   The particle vortex strength in x direction.
+ *  @param  _alphaY   The particle vortex strength in y direction.
+ *  @param  _alphaZ   The particle vortex strength in z direction.
+*/
 void fastFMM3Dutils::evaluateFMM(const FMMCell &treeData, 
             const std::vector<std::vector<double>> &parPos, 
             const std::vector<bool> &activeMark,
@@ -215,6 +282,8 @@ void fastFMM3Dutils::evaluateFMM(const FMMCell &treeData,
     this->velY = std::vector<double>(parNum, 0.0);     // Velocity in y direction
     this->velZ = std::vector<double>(parNum, 0.0);     // Velocity in z direction
 
+    // A tools for multipole
+    fmm3D FMM3D_tools;
 
     // PROCEDURE 3! : Calculate the field at each target position
     // ************
@@ -286,54 +355,17 @@ void fastFMM3Dutils::evaluateFMM(const FMMCell &treeData,
                     R2 = dx*dx + dy*dy + dz*dz;
 
                     // Check the distance (by check squared check)
-                    double R_check = treeData.size[chdID] * SUPPORT_RADIUS_SCALE;
+                    double R_check = treeData.size[chdID] * SUPPORT_RADIUS_FACTOR;
                     if (R2 > R_check*R_check){
                         // The cell considered as far cell
-
-                        // Calculate the farfield
-                        double R = sqrt(R2);                 // Distance
-                        double R3 = R * R2;                  // Distance power 3
-                        double R5 = R3 * R2;                 // Distance power 5
-                        double R7 = R5 * R2;                 // Distance power 7
 
                         // Multipole differential multiplier
                         std::vector<double> diff_mul_x(this->expOrd);
                         std::vector<double> diff_mul_y(this->expOrd);
                         std::vector<double> diff_mul_z(this->expOrd);
 
-                        // Multiplier in x differential
-                        diff_mul_x[0] = dx/R3;
-                        diff_mul_x[1] = -(3*dx*dx/R5) + (1/R3);
-                        diff_mul_x[2] = -(3*dx*dy/R5);
-                        diff_mul_x[3] = -(3*dx*dz/R5);
-                        diff_mul_x[4] = (15*dx*dx*dx/R7) - (9*dx/R5);
-                        diff_mul_x[5] = (15*dx*dy*dy/R7) - (3*dx/R5);
-                        diff_mul_x[6] = (15*dx*dz*dz/R7) - (3*dx/R5);
-                        diff_mul_x[7] = (15*dx*dx*dy/R7) - (3*dy/R5);
-                        diff_mul_x[8] = (15*dx*dy*dz/R7);
-                        diff_mul_x[9] = (15*dx*dx*dz/R7) - (3*dz/R5);
-                        // Multiplier in y differential
-                        diff_mul_y[0] = dy/R3;
-                        diff_mul_y[1] = -(3*dy*dx/R5);
-                        diff_mul_y[2] = -(3*dy*dy/R5) + (1/R3);
-                        diff_mul_y[3] = -(3*dy*dz/R5);
-                        diff_mul_y[4] = (15*dy*dx*dx/R7) - (3*dy/R5);
-                        diff_mul_y[5] = (15*dy*dy*dy/R7) - (9*dy/R5);
-                        diff_mul_y[6] = (15*dy*dz*dz/R7) - (3*dy/R5);
-                        diff_mul_y[7] = (15*dy*dx*dy/R7) - (3*dx/R5);
-                        diff_mul_y[8] = (15*dy*dy*dz/R7) - (3*dz/R5);
-                        diff_mul_y[9] = (15*dy*dx*dz/R7);
-                        // Multiplier in z differential
-                        diff_mul_z[0] = dz/R3;
-                        diff_mul_z[1] = -(3*dz*dx/R5);
-                        diff_mul_z[2] = -(3*dz*dy/R5);
-                        diff_mul_z[3] = -(3*dz*dz/R5) + (1/R3);
-                        diff_mul_z[4] = (15*dz*dx*dx/R7) - (3*dz/R5);
-                        diff_mul_z[5] = (15*dz*dy*dy/R7) - (3*dz/R5);
-                        diff_mul_z[6] = (15*dz*dz*dz/R7) - (9*dz/R5);
-                        diff_mul_z[7] = (15*dz*dx*dy/R7);
-                        diff_mul_z[8] = (15*dz*dy*dz/R7) - (3*dy/R5);
-                        diff_mul_z[9] = (15*dz*dx*dz/R7) - (3*dx/R5);
+                        // Calculate the multipole differential multiplier
+                        FMM3D_tools.M2P_mul_calc(diff_mul_x, diff_mul_y, diff_mul_z, R2, dx, dy, dz);
 
                         // Update the current calculated field
                         for (int i = 0; i < this->expOrd; i++){
@@ -391,22 +423,14 @@ void fastFMM3Dutils::evaluateFMM(const FMMCell &treeData,
 }
 
 
-void fastFMM3Dutils::velocityCalc(const FMMCell &treeData, 
-            const std::vector<std::vector<double>> &_parPos, 
-            const std::vector<bool> &_activeFlag,
-            const std::vector<bool> &_targetFlag,
-            const std::vector<double> &_alphaX,
-            const std::vector<double> &_alphaY,
-            const std::vector<double> &_alphaZ)
-{
-    // Calculate multipole
-    this->multipoleCalc(treeData, _parPos, _activeFlag, _alphaX, _alphaY, _alphaZ);
 
-    // Calculate velocity
-    this->evaluateFMM(treeData, _parPos, _activeFlag, _targetFlag, _alphaX, _alphaY, _alphaZ);
+// #pragma endregion
 
-    return;
-}
+
+// =====================================================
+// +--------------- Tree Cell Utilities ---------------+
+// =====================================================
+// #pragma region TREE_CELL_UTILS
 
 // TREE DATA GENERATION SECTION
 void FMMCell::generateTree(const std::vector<std::vector<double>> &parPos, 
@@ -637,10 +661,39 @@ void FMMCell::generateTree(const std::vector<std::vector<double>> &parPos,
     // Update the maximum level in this tree data
     this->maxLevel = currLevel;
 
+    // Update the active sign
+    for (int level = this->maxLevel - 1; level > 0; level --){
+        // Iterate from one level above maximum level
+        // Alias to the begining and end of cellID at the current level
+        int beginID = this->startID[level];
+        int endID = this->startID[level+1];
+
+        // Iterate through all cell in the current level
+        // #pragma omp parallel for
+        for (int cellID = beginID; cellID < endID; cellID++){
+            // Skip if current cell is a leaf cell
+            if (this->nPar[cellID] < this->critNum) continue;    // Leaf cell have particle less than critNum
+            // if (this->chdFlag[cellID] == 0) continue;               // Leaf cell have no child
+
+            // Calculate the local source sum (ak) using M2M from each child
+            for (int octant = 0; octant < this->chdNum; octant++){
+                // Check if the child cell existed at current octant
+                if (((this->chdFlag[cellID] >> octant) % 2) == 0) continue;
+                
+                // Create the alias to the child
+                int chdID = this->chdID[cellID][octant];
+
+                // Evaluate the particle active sign
+                if (this->isActive[chdID]){
+                    this->isActive[cellID] = true;
+                    break;
+                }
+            }
+        }
+    }
+
     return;
 }
-
-// The current subroutine is the code refactor from the old code
 
 void FMMCell::save_all_tree(FMMCell treeData, std::string name){
     // Initialization of saving data
@@ -649,7 +702,7 @@ void FMMCell::save_all_tree(FMMCell treeData, std::string name){
     writer.open(name.c_str());
     
     // Write data table header
-    writer << "ID,x,y,z,size,level,isLeaf,isActive,parNum\n";
+    writer << "ID,x,y,z,size,lvl,isLeaf,isActive,parNum,chdFlag,parID\n";
 
     // Write data value
     for(int ID = 0; ID < this->cellNum; ID++){
@@ -662,6 +715,8 @@ void FMMCell::save_all_tree(FMMCell treeData, std::string name){
                << "," << (treeData.nPar[ID] < this->critNum)
                << "," << treeData.isActive[ID]
                << "," << treeData.nPar[ID]
+               << "," << treeData.chdFlag[ID]
+               << "," << treeData.parentID[ID]
                << "\n";
     }
     
@@ -676,7 +731,7 @@ void FMMCell::save_leaf_tree(FMMCell treeData, std::string name){
     writer.open(name.c_str());
     
     // Write data table header
-    writer << "ID,x,y,z,size,level,isActive,parNum\n";
+    writer << "ID,x,y,z,size,lvl,isActive,parNum,chdFlag,parID\n";
 
     // Write data value
     for(int ID = 0; ID < this->cellNum; ID++){
@@ -689,9 +744,13 @@ void FMMCell::save_leaf_tree(FMMCell treeData, std::string name){
                << "," << treeData.getCellLevel(treeData.size[ID])
                << "," << treeData.isActive[ID]
                << "," << treeData.nPar[ID]
+               << "," << treeData.chdFlag[ID]
+               << "," << treeData.parentID[ID]
                << "\n";
     }}
     
     writer.close();
     return;
 }
+
+// #pragma endregion

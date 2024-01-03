@@ -39,7 +39,7 @@ private:
     // std::unordered_map<int, std::vector<double>> mp_Vz;  // Local particle source sum of vorticity in z, origin at current cell center
 
     // Internal method
-    int binComb(int n, int k);  // Function to calculate the binomial combinatoric
+    int binComb(int n, int k) const;  // Function to calculate the binomial combinatoric
 
     // FMM direct calculation tools
     void potDirSum(int _cellID, const TreeCell &_cellTree,      // Function to calculate the direct sum potential
@@ -79,13 +79,13 @@ public:
                        const std::vector<bool> &_activeFlag, 
                        const std::vector<double> &_srcVal);
     
-    // The FMM calculation for field
+    // The FMM calculation for field (Calculate the velocity per direction)
     void calcField(const TreeCell &_cellTree, 
                    const std::vector<std::vector<double>> &_parPos, 
                    const std::vector<bool> &_activeFlag, 
                    const std::vector<double> &_srcVal);
 
-    // The FMM calculation for velocity field
+    // The FMM calculation for velocity field (Calculate all particle)
     void calcVelocity(const TreeCell &_cellTree, 
                       const std::vector<std::vector<double>> &_parPos, 
                       const std::vector<bool> &_activeFlag, 
@@ -93,7 +93,7 @@ public:
                       const std::vector<double> &_alphaY,
                       const std::vector<double> &_alphaZ);
 
-    // The FMM calculation for velocity field
+    // The FMM calculation for velocity field (Calculate a target only)
     void calcVelocityNearBody(const TreeCell &_cellTree, 
                               const std::vector<std::vector<double>> &_parPos, 
                               const std::vector<bool> &_activeFlag, 
@@ -110,11 +110,32 @@ public:
                           const std::vector<double> &_alphaY,
                           const std::vector<double> &_alphaZ);
 
+    
     // The FMM get function from the result of calculation
-    std::vector<double> get_Potential();
-    std::vector<double> get_Field_x();
-    std::vector<double> get_Field_y();
-    std::vector<double> get_Field_z();
+
+    void P2M_calc(std::vector<double> &multipole, 
+                  const double &src,
+                  const double &dx, 
+                  const double &dy, 
+                  const double &dz) const;
+    void M2M_calc(std::vector<double> &_mParent, 
+                  std::vector<double> &_mChild, 
+                  const double &dx, 
+                  const double &dy, 
+                  const double &dz) const;
+    void M2P_mul_calc(std::vector<double> &diff_x, 
+                      std::vector<double> &diff_y, 
+                      std::vector<double> &diff_z, 
+                      const double &R2, 
+                      const double &dx, 
+                      const double &dy, 
+                      const double &dz) const;
+
+    // The FMM get function from the result of calculation
+    std::vector<double> get_Potential() const;
+    std::vector<double> get_Field_x() const;
+    std::vector<double> get_Field_y() const;
+    std::vector<double> get_Field_z() const;
 };
 
 #endif

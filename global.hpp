@@ -77,7 +77,7 @@ namespace Pars{
 }
 
 // #pragma region BASIC_CONSTANT_PARAMETER
-    #define DIM 2                   // The domain spatial dimension, 2:= 2D simulation; 3:= 3D simulation
+    #define DIM 3                   // The domain spatial dimension, 2:= 2D simulation; 3:= 3D simulation
     #define N_BODY 1                // The number of obstacle body object
     // #define PRECISION_FACTOR 1e-5   // A number factor to avoid wrong <double> to <int> truncation (e.g. calculating grid count from domain length division toward grid length)
 // #pragma endregion

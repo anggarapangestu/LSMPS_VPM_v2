@@ -22,9 +22,6 @@ private:
     }
     
 public:
-    // =====================================
-    // ========== INTERNAL METHOD ==========
-    // =====================================
     void generateTree(const std::vector<std::vector<double>> &parPos, const std::vector<bool> &activeFlag);
     int getCellLevel(const double &size){
         int level = std::round(std::log2(this->rootLength / size));
@@ -78,13 +75,14 @@ class fastFMM3Dutils
 {
 private:
     // The private class
-    void multipoleCalc(const FMMCell &treeData, 
+
+    void multipoleCalc(const FMMCell &_treeData, 
                        const std::vector<std::vector<double>> &_parPos, 
                        const std::vector<bool> &_activeFlag,
                        const std::vector<double> &_alphaX,
                        const std::vector<double> &_alphaY,
                        const std::vector<double> &_alphaZ);
-    void evaluateFMM(const FMMCell &treeData, 
+    void evaluateFMM(const FMMCell &_treeData, 
                      const std::vector<std::vector<double>> &_parPos, 
                      const std::vector<bool> &_activeFlag,
                      const std::vector<bool> &_targetFlag,
@@ -98,11 +96,7 @@ private:
 	std::vector<std::vector<double>> m_Vz;  // Multipole for source in z direction
 
 public:
-    // =====================================
-    // ========== INTERNAL METHOD ==========
-    // =====================================
-
-    void velocityCalc(const FMMCell &treeData, 
+    void velocityCalc(const FMMCell &_treeData, 
                       const std::vector<std::vector<double>> &_parPos, 
                       const std::vector<bool> &_activeFlag,
                       const std::vector<bool> &_targetFlag,
@@ -111,9 +105,7 @@ public:
                       const std::vector<double> &_alphaZ);
 
     // Fundamental parameter
-    int chdNum;               // Number of child cell (must be 8 for 3D)
-    int critNum;              // Maximum number of particle in cell
-    const int expOrd;         // The expansion order
+    const int expOrd;               // The expansion order
 
     // Particle velocity
     std::vector<double> velX;       // The velocity in x direction

@@ -477,7 +477,7 @@ namespace Pars
         // Operator Flag
         extern const bool flag_pressure_calc  = _X_;    // [I] The flag to calculate pressure on post processing [STILL NOT CHECKED]
         extern const bool flag_adaptive_dist  = _O_;    // [I] The flag for adaptive particle distribution
-        extern const bool flag_fast_remesh = _X_;       // [I] [TURN this OFF] The flag for effective remeshing calculation (Turns out not very effective that I thought, otherwise slightly slower)
+        extern const bool flag_fast_remesh    = _X_;    // [I] [TURN this OFF] The flag for effective remeshing calculation (Turns out not very effective that I thought, otherwise slightly slower)
         
         // Additional Flag
         extern const bool flag_ngh_include_self = _O_;        // [I] The flag for neighbor evaluation include itself [STILL NOT CHECKED]
@@ -566,9 +566,9 @@ namespace Pars
     // =====================================================
     // #pragma region DOMAIN_PARAMETER
         extern const double lxdom = 8.0e0;      // [I] Initial domain length on x-axis
-        extern const double lydom = 4.0e0;      // [I] Initial domain length on y-axis
-        extern const double lzdom = 4.0e0;      // [I] Initial domain length on z-axis
-        extern const double xdom  = 2.0e0;      // [I] Negative x-direction domain length
+        extern const double lydom = 3.0e0;      // [I] Initial domain length on y-axis
+        extern const double lzdom = 3.0e0;      // [I] Initial domain length on z-axis
+        extern const double xdom  = 1.0e0;      // [I] Negative x-direction domain length
         extern const double xcenter = 0.0e0;    // [I] Initial domain center (x-axis), default 0.0
         extern const double ycenter = 0.0e0;    // [I] Initial domain center (y-axis), default 0.0
         extern const double zcenter = 0.0e0;    // [I] Initial domain center (z-axis), default 0.0
@@ -609,7 +609,7 @@ namespace Pars
     // #pragma region COMPUTATIONAL_PARAMETER
         // Basic parameter
         extern const double sigma    = 0.02e0;      // [I] Particle core size; <?> default: 0.0025, dt~(1/2)*sigma - (1/3)*sigma
-        extern const double dt       = 0.01e0;      // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
+        extern const double dt       = 0.005e0;     // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
         extern const double sim_time = 200.0e0;     // [I] The total simulation time
         extern const int resume_step = 3300; //39600;//      // [I] Iteration step ID of data for resuming simulation
 
@@ -771,7 +771,7 @@ namespace Pars
             1 + std::ceil(Pars::sim_time / Pars::dt);
         
         // Parameter of data write
-        extern const int step_inv = 100;             // [I] Step interval for saving data parameter [Type 1]
+        extern const int step_inv = 1;             // [I] Step interval for saving data parameter [Type 1]
         extern const int file_num = 100;            // [I] Total file to be saved parameter [Type 2]
         extern const double comp_time_inv = 200.0;  // [I] Computational time (in second) interval for data writting parameter [Type 3]
 
