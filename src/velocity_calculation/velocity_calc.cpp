@@ -13,7 +13,7 @@
  *   [1] : Refactor of old code (tree data built in vector, turns out to be 1.5 times faster)
  *   [2] : New code using tree code built in unordered map of cell pointer
 */
-#define VELOCITY_3D_TYPE 2
+#define VELOCITY_3D_TYPE 1
 
 #define ALL_PARTICLE true	// Code construction is still on going
 

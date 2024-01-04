@@ -62,7 +62,7 @@ namespace Pars
                     5:= Grid Node Based
                 */
 
-        extern const std::vector<int> opt_body = {1,5,4,1,4};
+        extern const std::vector<int> opt_body = {2,5,4,1,4};
                 /* [O] The body type option:
                             2D simulation   |   3D simulation   
                         --------------------|-------------------
@@ -123,10 +123,10 @@ namespace Pars
     // +----------- Simulation Domain Parameter -----------+
     // =====================================================
     // #pragma region DOMAIN_PARAMETER
-        extern const double lxdom = 25.0e0;     // [I] Initial domain length on x-axis
+        extern const double lxdom = 20.0e0;     // [I] Initial domain length on x-axis
         extern const double lydom = 10.0e0;     // [I] Initial domain length on y-axis
         extern const double lzdom = 0.0e0;      // [I] Initial domain length on z-axis
-        extern const double xdom  = 4.0e0;      // [I] Negative x-direction domain length
+        extern const double xdom  = 2.5e0;      // [I] Negative x-direction domain length
         extern const double xcenter = 0.0e0;    // [I] Initial domain center (x-axis), default 0.0
         extern const double ycenter = 0.0e0;    // [I] Initial domain center (y-axis), default 0.0
         extern const double zcenter = 0.0e0;    // [I] Initial domain center (z-axis), default 0.0
@@ -329,7 +329,7 @@ namespace Pars
             1 + std::ceil(Pars::sim_time / Pars::dt);
         
         // Parameter of data write
-        extern const int step_inv = 1;             // [I] Step interval for saving data parameter [Type 1]
+        extern const int step_inv = 100;             // [I] Step interval for saving data parameter [Type 1]
         extern const int file_num = 100;            // [I] Total file to be saved parameter [Type 2]
         extern const double comp_time_inv = 200.0;  // [I] Computational time (in second) interval for data writting parameter [Type 3]
 
@@ -771,7 +771,7 @@ namespace Pars
             1 + std::ceil(Pars::sim_time / Pars::dt);
         
         // Parameter of data write
-        extern const int step_inv = 1;             // [I] Step interval for saving data parameter [Type 1]
+        extern const int step_inv = 100;             // [I] Step interval for saving data parameter [Type 1]
         extern const int file_num = 100;            // [I] Total file to be saved parameter [Type 2]
         extern const double comp_time_inv = 200.0;  // [I] Computational time (in second) interval for data writting parameter [Type 3]
 
