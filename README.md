@@ -49,7 +49,7 @@ This note helps author to make target on this program.
 - Broken FMM calculation (The velocity field not continue, having some block with discontinuity value) [CAUSE]-> Double cell ID in list 1 and 3 for the cell outside the vorticity source region -> [SOLUTION] Set a flag to prevent duplicate
 - [2] Broken FMM calculation (Quite big discontinuity) [CAUSE]-> Wandering of nearest cell list for internal list 1 and 3. After taking the parent recursively, the code let a bypass to get child thus the cell can be separated apart from the evaluated cell (not near anymore) [SOLUTION]-> Put additional treatment, cannot find child for a cell that is the parent from candidate neighbor cell.
 - Anticipated wrong starting cell ID at each level -> Add additional code for treatment near between level boundary.
-
+- A mozaic pattern comes again into the velocity calculation [CAUSE]-> The double comparison problem in comparing the distance between cell in list evaluation (list_1 through list_4). The tiny deliberately boundary displacement adjustment using built in value of __DBL_EPSILON__ is BEYOND the comparison (turns out no effect). [SOLUTION]-> go back to the original user defined value of 10^-10 for EPSILON_TOLERANCE.
 
 NOTE FOR MIGRATION to 3D
 > Check the vortex strength ->

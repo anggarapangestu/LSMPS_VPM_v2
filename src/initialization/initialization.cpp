@@ -19,7 +19,13 @@
 void initialization::initialize_particle(Particle &_par, const std::vector<Body> &_BL, GridNode &_grid){
     printf("\n+------------ Particle Initialization ------------+\n");
     // Computational time accumulation
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // Initialize the particle based on the given simulation starting state option
     if (Pars::opt_start_state == 0){
@@ -51,7 +57,14 @@ void initialization::initialize_particle(Particle &_par, const std::vector<Body>
     geom_tool.eval_body_flag(_par, _BL);    // Calculate near surface flag, inside body flag, chi, active flag
 
     // Particle generation initialization summary time display
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<+> Number of initialize particles      : %8d \n", _par.num);
 	printf("<-> Particle initialization computational\n");
     printf("    time:                              [%f s]\n", _time);

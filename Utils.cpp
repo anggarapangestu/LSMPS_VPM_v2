@@ -153,11 +153,12 @@ void simUtil::predictCompTime(int step, double curr_comp_time){
 	est_time_m = int(est_time_s / (60));
 	est_time_s -= est_time_m * (60);
 	
-	printf("\n<!> Estimation time to finish run:     %9.3f s", curr_comp_time*double(Pars::max_iter - step));
+	// The simulation estimation is limited to 999 days of simulation
+	printf("\n<!> Estimation time to finish run : %12.2f s", curr_comp_time*double(Pars::max_iter - step));
 	if (est_time_d == 0){
-		printf("\n<!> Estimation time to finish run: %2dh %2dm %5.2f s", est_time_h, est_time_m, est_time_s);
+		printf("\n<!> Estimation time to finish run :    %2dh %2dm %2ds", est_time_h, est_time_m, (int)est_time_s);
 	}else{
-		printf("\n<!> Estimation time to finish: %2dd %2dh %2dm %5.2f s", est_time_d, est_time_h, est_time_m, est_time_s);
+		printf("\n<!> Estimation time to finish run :  %3ddays %2dhrs", est_time_d, est_time_h);
 	}
 
 	printf("\n");

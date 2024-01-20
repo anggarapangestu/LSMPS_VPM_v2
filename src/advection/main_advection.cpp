@@ -8,7 +8,13 @@ void advection::main_advection(Particle &p){
     printf("\nCalculating advection ...\n");
 
     // Advection computational time manager
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     if (ADVECTION_TYPE == 1){
         printf("%s<+> Type 1: Euler type %s\n", FONT_CYAN, FONT_RESET);
@@ -20,7 +26,14 @@ void advection::main_advection(Particle &p){
     }
     
     // Display computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Advection computational time:      [%f s]\n", _time);
 
     return;

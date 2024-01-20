@@ -12,7 +12,7 @@
 class penalization
 {
 	// Internal variables
-	double lambda;				// Porosity parameter @life_time : throughout simulation
+	// double lambda;				// Porosity parameter @life_time : throughout simulation
     std::vector<int> baseID;    // The list of ID pointing to original particle ID
 
 	// Definition Method

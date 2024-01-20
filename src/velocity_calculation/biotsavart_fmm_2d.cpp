@@ -77,10 +77,10 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 	ci = std::complex<double>(0.0, 1.0);
 
 	// !!!!=== step 1 === //Build a Tree (bisa dioptimize dengan nyimpan treenya di private variable (sepertinya))
-	start = omp_get_wtime();
+	// start = omp_get_wtime();
 	hierarchy_mesh(n0, n1, npi, xi, yi, n2, n3, npj, xj, yj, n_s, n_inter, xmin, ymin, xmax, ymax,
 				   nb, xb_min, yb_min, xb_max, yb_max, xb_cen, yb_cen, lev, nchild, ichild, iparent, particleinbox);
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> Tree finished in : %f s\n", finish-start);
 
@@ -89,7 +89,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 	//ProgressBar progressBar(nTotal, 40, '|', ' ');
 	// !!!!===============================================
 	
-	start = omp_get_wtime();
+	// start = omp_get_wtime();
 	ibtt = 0;
 	//ndp = number of multipole expansion
 	for (int k = 1; k <= lev; k++) //check every level
@@ -111,7 +111,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 			}
 		}
 	}
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> checkpoint 1 : %f s\n", finish-start);
 	//============= finished initialization =============
@@ -119,7 +119,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 
 	//====================== Multipole construction==============================
 	// !!!!=== step 2.1 ====================== Multipole expansion
-	start = omp_get_wtime();
+	// start = omp_get_wtime();
 	for (int k = 1; k <= lev; k++) //check every level
 	{
 		//++progressBar;		   // record the tick
@@ -151,14 +151,14 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 			}
 		}
 	}
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> checkpoint 2 : %f s\n", finish-start);
 	//printf("checkpoint 2\n");
 
 	
 	// !!!!=== step 2.2 === Multipole shifting bottom up 
-	start = omp_get_wtime();
+	// start = omp_get_wtime();
 	for (int k = lev - 1; k >= 1; k--) //check every level from bottom to up
 	{
 		//++progressBar;		   // record the tick
@@ -186,7 +186,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 			}
 		}
 	}
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> checkpoint 3 : %f s\n", finish-start);
 	//=============================== Finished Multipole expansion =============================
@@ -195,7 +195,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 	double total4 = 0, total5 = 0;
  
 	// !!!!=== step 4 & 6 === Local expansion ??
-	start = omp_get_wtime(); 
+	// start = omp_get_wtime(); 
 	for (int k = 1; k <= lev; k++){//check every level
 		//++progressBar;		   // record the tick
 		//progressBar.display(); // display the bar only at certain steps
@@ -204,13 +204,13 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 		{
 			zg = std::complex<double>(xb_cen[ib][k], yb_cen[ib][k]); //the center of the selected box
 
-			start1 = omp_get_wtime();
+			// start1 = omp_get_wtime();
 			// !!!! ==== step 4 ===
 			list_two(ib, k, nb, xb_min, yb_min, xb_max, yb_max,
 					 iparent, nchild, ichild, nls2, ils2, kls2);
 			
-			total1 += omp_get_wtime() - start1;
-			start1 = omp_get_wtime();
+			// total1 += omp_get_wtime() - start1;
+			// start1 = omp_get_wtime();
 
 			if (nls2 > 0)
 			{
@@ -232,14 +232,14 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 					}
 				}
 			}
-			total2 += omp_get_wtime() - start1;
-			start1 = omp_get_wtime();
+			// total2 += omp_get_wtime() - start1;
+			// start1 = omp_get_wtime();
 			// !!!! ==== step 6 ===
 			list_four(ib, k, nb, xb_min, yb_min, xb_max, yb_max,
 					  iparent, nchild, nls4, ils4, kls4);
 			
-			total3 += omp_get_wtime() - start1;
-			start1 = omp_get_wtime();
+			// total3 += omp_get_wtime() - start1;
+			// start1 = omp_get_wtime();
 			if (nls4 > 0)
 			{
 				for (int ib1 = 1; ib1 <= nls4; ib1++)
@@ -265,11 +265,11 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 				}
 			}
 			
-			total4 += omp_get_wtime() - start1;
-			start1 = omp_get_wtime();
+			// total4 += omp_get_wtime() - start1;
+			// start1 = omp_get_wtime();
 		}
 	}
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> checkpoint 4 : %f s\n", finish-start);
 	printf("List 2  = %f s\n", total1);
@@ -279,7 +279,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 	//printf("checkpoint 4\n");
 	
 	// !!!!=== step 7 ===
-	start = omp_get_wtime();
+	// start = omp_get_wtime();
 	for (int k = 1; k <= lev - 1; k++)
 	{
 		//++progressBar; // record the tick
@@ -310,21 +310,21 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 			}
 		}
 	}
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> checkpoint 5 : %f s\n", finish-start);
 	//printf("checkpoint 5\n");
 	total1 = 0, total2 = 0, total3 = 0, start1 = 0;
 	total4 = 0, total5 = 0;
 	// !!!!=== step 3 & 5 & 8 ===
-	start = omp_get_wtime();
+	// start = omp_get_wtime();
 	for (int k = 1; k <= lev; k++)
 	{
 		for (int ib = 1; ib <= nb[k]; ib++)
 		{
 			if (nchild[ib][k] == 0)
 			{
-				start1 = omp_get_wtime();
+				// start1 = omp_get_wtime();
 				//par_loc(n0, n1, npi, xi, yi, xb_min[ib][k], xb_max[ib][k],
 				//		yb_min[ib][k], yb_max[ib][k], nip, ipp);
 				nip = particleinbox[k][ib].size();
@@ -336,8 +336,8 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 				list_one(ib, k, nb, lev, xb_min, yb_min, xb_max, yb_max,
 						 nchild, nls1, ils1, kls1);
 				
-				total1 += omp_get_wtime() - start1;
-				start1 = omp_get_wtime();
+				// total1 += omp_get_wtime() - start1;
+				// start1 = omp_get_wtime();
 
 				if ((nip > 0) && (nls1 > 0))
 				{
@@ -356,14 +356,14 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 						}
 					}
 				}
-				total2 += omp_get_wtime() - start1;
-				start1 = omp_get_wtime();
+				// total2 += omp_get_wtime() - start1;
+				// start1 = omp_get_wtime();
 				// !!!! ==== step 5 ===
 				list_three(ib, k, nb, lev, xb_min, yb_min, xb_max, yb_max,
 						   nchild, ichild, nls3, ils3, kls3);
 				
-				total3 += omp_get_wtime() - start1;
-				start1 = omp_get_wtime();
+				// total3 += omp_get_wtime() - start1;
+				// start1 = omp_get_wtime();
 
 				if ((nip > 0) && (nls3 > 0))
 				{
@@ -393,8 +393,8 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 						vi[ip] = vi[ip] - std::imag(cmw2);						
 					}
 				}
-				total4 += omp_get_wtime() - start1;
-				start1 = omp_get_wtime();
+				// total4 += omp_get_wtime() - start1;
+				// start1 = omp_get_wtime();
 				// !            !!!! ==== step 8 ===
 				if (nip > 0)
 				{
@@ -417,7 +417,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 						vi[ipp[ip2-1]] = vi[ipp[ip2-1]] - std::imag(cmw2);
 					}
 				}
-				total5 += omp_get_wtime() - start1;
+				// total5 += omp_get_wtime() - start1;
 			}
 		}
 		//++progressBar; // record the tick
@@ -425,7 +425,7 @@ void velocity_biot_savart::biotsavart_fmm_2d(Particle &pi, Particle &pj, const i
 		// if (i % 10 == 0)
 		//progressBar.display(); // display the bar only at certain steps
 	}
-	finish = omp_get_wtime();
+	// finish = omp_get_wtime();
 	total += (finish-start);
 	printf("<+> checkpoint 6 : %f s\n", finish-start);
 	printf("List 1       = %f s\n", total1);

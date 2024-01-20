@@ -23,7 +23,13 @@ void stretching::main_stretching(Particle &p)
     _eval = std::vector<bool>(p.num, false);    // At initial still no evaluated particle list
     
     // Stretching computational time manager
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     
     // Stretching prompt
     printf("\nCalculating stretching ...\n");
@@ -134,7 +140,14 @@ void stretching::main_stretching(Particle &p)
     //         because it will be calculated in the next section (particle redistribution)
 
     // Display computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Stretching total computation time: [%f s]\n", _time);
     
     return;
@@ -166,7 +179,13 @@ void stretching::calc_diff_stretch(Particle &p){
     _eval = std::vector<bool>(p.num, false);    // At initial still no evaluated particle list
     
     // Diffusion and stretching computational time manager
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     
     
     // PROCEDURE 1:
@@ -234,7 +253,14 @@ void stretching::calc_diff_stretch(Particle &p){
     }
     
     // Display computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Collect data computing time:       [%f s]\n", _time);
 
     
@@ -243,7 +269,13 @@ void stretching::calc_diff_stretch(Particle &p){
     // ************
     // Calculating the diffusion
     printf("\nCalculating diffusion ...\n");
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     
     // Calculate the second order differential of vorticity
     // Calculate the x directing vorticity
@@ -279,7 +311,14 @@ void stretching::calc_diff_stretch(Particle &p){
     }
 
     // Display computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Diffusion total computation time:  [%f s]\n", _time);
 
 
@@ -288,7 +327,13 @@ void stretching::calc_diff_stretch(Particle &p){
     // ************
     // Calculating the stretching
     printf("\nCalculating stretching ...\n");
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Calculate the first order differential of velocity
     // Calculate the velocity x (u) differential
@@ -327,7 +372,14 @@ void stretching::calc_diff_stretch(Particle &p){
     //         because it will be calculated in the next section (particle redistribution)
 
     // Display computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Stretching total computation time: [%f s]\n", _time);
     
     return;

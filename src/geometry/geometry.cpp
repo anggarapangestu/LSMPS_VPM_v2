@@ -20,7 +20,16 @@ void geometry::generateBody(std::vector<Body> &_bodyList){
 		printf("Generating surface node of body %d ... \n", part);
 		
 		// Computational time accumulation
-		double _time = omp_get_wtime();
+		#if (TIMER_PAR == 0)
+			// Timer using super clock
+			std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+			// // Timer using simple timer
+			// clock_t tick = clock();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			double _time = omp_get_wtime();
+		#endif
+
 		
 		// Create the solid body data according to body option in Pars namespace
 		if (DIM == 2)
@@ -88,7 +97,16 @@ void geometry::generateBody(std::vector<Body> &_bodyList){
 		}
 		
 		// Geometry computational time display
-		_time = omp_get_wtime() - _time;
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+			double _time = span.count();
+			// // Timer using simple clock
+			// double _time = (clock() - tick)/CLOCKS_PER_SEC;
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			_time = omp_get_wtime() - _time;
+		#endif
 		printf("<-> Solid body generation comp. time:  [%f s]\n", _time);
 
 		// Update the geometry velocity

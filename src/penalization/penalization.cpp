@@ -20,13 +20,19 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
     */
     
     // Penalization time manager
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     printf("\nCalculating penalization ... \n");
 
     // PROCEDURE 1: Collect near body particle
     // ********************************************************************
     // Internal variables
-    std::unordered_map<int,int> tempIdx;  	// Index convertion from original to new index (for obtaining neighbor list)
+    std::unordered_map<int, int> tempIdx;  	// Index convertion from original to new index (for obtaining neighbor list)
     Particle _tempPar;          // Temporary particle for evaluation (Near body particle only)
     _tempPar.num = 0;           // Initial particle number value
     
@@ -46,7 +52,7 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
     }
     
     // Update the other data
-    if (DIM == 2){
+    #if (DIM == 2)
         _tempPar.x.resize(_tempPar.num);
         _tempPar.y.resize(_tempPar.num);
         _tempPar.u.resize(_tempPar.num);
@@ -73,8 +79,8 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
             _tempPar.bodyPart[i] = _currPar.bodyPart[ori_ID];
             _tempPar.chi[i] = _currPar.chi[ori_ID];
         }
-    }
-    else if (DIM == 3){
+    
+    #elif (DIM == 3)
         _tempPar.x.resize(_tempPar.num);
         _tempPar.y.resize(_tempPar.num);
         _tempPar.z.resize(_tempPar.num);
@@ -107,12 +113,12 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
             _tempPar.bodyPart[i] = _currPar.bodyPart[ori_ID];
             _tempPar.chi[i] = _currPar.chi[ori_ID];
         }
-    }
+    #endif
 
 
     // Get the local neighbor ID
     _tempPar.neighbor.resize(_tempPar.num);         // Take from original neighbor list, transform the index to new index
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int i = 0; i < _tempPar.num; i++){
         // Aliasing to the original index
         int &original_ID = this->baseID[i];
@@ -145,21 +151,21 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
     // PROCEDURE 3: Perform the vorticity penalization
     // ********************************************************************
     // Perform the penalization
-    if (Pars::opt_pen_iter == 1){
+    // if (Pars::opt_pen_iter == 1){
         if (DIM == 2)
-        this->no_slip(_tempPar, _currPar, bL, step);
+            this->no_slip(_tempPar, _currPar, bL, step);
         else if (DIM == 3)
-        this->no_slip_3d(_tempPar, _currPar, bL, step);
-    }
-    else if (Pars::opt_pen_iter == 2){
+            this->no_slip_3d(_tempPar, _currPar, bL, step);
+    // }
+    if (Pars::opt_pen_iter == 2){
         this->no_slip_iterative(_tempPar, _currPar, bL, step);
     }
 
     // PROCEDURE 4: [ADDITIONAL] Set vorticity inside body to zero
     // ********************************************************************
     // Update the vorticity inside the body to zero (cancel the vorticity residual by error LSMPS calculation)
-    if (DIM == 2){
-        #pragma omp parallel for
+    #if (DIM == 2)
+        // #pragma omp parallel for
         for(int ID = 0; ID < _currPar.num; ID++){
             if (_currPar.insideBody[ID] == true){
                 // Set the vorticity inside body to zero (0) to counter truncation error
@@ -167,9 +173,8 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
                 _currPar.gz[ID] = 0;
             }
         }
-    }
-    else if (DIM == 3){
-        #pragma omp parallel for
+    #elif (DIM == 3)
+        // #pragma omp parallel for
         for(int ID = 0; ID < _currPar.num; ID++){
             if (_currPar.insideBody[ID] == true){
                 // Set the vorticity inside body to zero (0) to counter truncation error
@@ -178,9 +183,16 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
                 _currPar.vortz[ID] = 0;
             }
         }
-    }
+    #endif
 
     // Display penalization computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Penalization computational time:   [%f s]\n", _time);
 }

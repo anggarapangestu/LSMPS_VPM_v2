@@ -282,7 +282,7 @@ void geometry::eval_body_flag(Particle &_par, const std::vector<Body> &_bodyList
     _par.isActive.resize(_par.num, false);
     #pragma omp parallel for
     for (int i = 0; i < _par.num; i++){
-        // Only change the flag for true condition
+        // Only change the flag for true condition for near surface particle
 		if (_par.isNearSurface[i] == true){
 			_par.isActive[i] = true;
 		}

@@ -12,7 +12,7 @@ void pressure_poisson::get_pressure(Particle& p){
 	bool src_save = false;	// Toogle for saving the pressure source
 
 	// Update the start clock
-	clock_t _time = clock();
+	clock_t _timer = clock();
 				
 	// Solver computation
 	printf("\nCalculate Pressure ...\n");
@@ -30,9 +30,16 @@ void pressure_poisson::get_pressure(Particle& p){
 	std::vector<std::vector<double>> particle_POS(p.num, std::vector<double>(DIM,0.0));	// Particle position
 	std::vector<double> particle_SRC(p.num, 0.0);	// The particle source
 	std::vector<bool> particle_mark(p.num, false);	// The particle active mark
-	double start,finish;							// Computational time
 	
-	start = omp_get_wtime();
+	// Time manager
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+
 
 	// Initialization of the temporary source
 	std::vector<double> _SRC(p.num, 0.0);
@@ -152,8 +159,15 @@ void pressure_poisson::get_pressure(Particle& p){
 		particle_mark[i] = particle_mark[i] | p.isActive[i];
 	}
 
-	finish = omp_get_wtime();
-	printf("<+> Initialization   : %f s\n", finish-start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> Initialization   : %f s\n", _time);
 
 	// DEBUGGING: save data value
 	if (src_save == true){
@@ -162,7 +176,13 @@ void pressure_poisson::get_pressure(Particle& p){
 
 	// [4] Initialization of FMM Tree
 	// ******************************
-	start = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 	// Initialization Tree Map
 	// if (this->init == true){
 		treeData.initializeTree(particle_POS, particle_mark);
@@ -180,8 +200,15 @@ void pressure_poisson::get_pressure(Particle& p){
 		treeData.saveTree(treeData, name);	
 	}
 
-	finish = omp_get_wtime();
-	printf("<+> Tree finished in : %f s\n", finish-start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> Tree finished in : %f s\n", _time);
 
 	// [5] FMM Potential Calculation
 	// *****************************
@@ -211,8 +238,8 @@ void pressure_poisson::get_pressure(Particle& p){
 	// }
 
 	// Display computational time
-	_time = clock() - _time;    // Calculate the time duration
-	printf("<-> Pressure calculation comp. time:   [%f s]\n", (double)_time/CLOCKS_PER_SEC);
+	_timer = clock() - _timer;    // Calculate the time duration
+	printf("<-> Pressure calculation comp. time:   [%f s]\n", (double)_timer/CLOCKS_PER_SEC);
 
 	
 	// =================================================================================

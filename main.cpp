@@ -24,9 +24,9 @@
 // #pragma region INCLUDE_PACKAGE
 	// Parameter and Utilities
 	// ***********************
-	#include "global.hpp"					// Simulation setting and parameter
-	#include "Utils.hpp"					// Simulation data storage
-	#include "src/grid_block/gridNode.hpp"	// Particle data grouping
+	#include "global.hpp"						// Simulation setting and parameter
+	#include "Utils.hpp"						// Simulation data storage
+	#include "src/grid_block/gridNode.hpp"		// Particle data grouping
 
 	// Subroutine Packages
 	// *******************
@@ -68,7 +68,7 @@ int main(int argc, char const *argv[])
 		
 		// *Solver tools
 		penalization penalization_tool;      // Penalization calculation
-		VelocityCalc velocity_tool;      	 // Biot Savart velocity solver [by FMM]
+		VelocityCalc velocity_tool;      	 // Biot Savart velocity solver [accelerated by FMM]
 		advection advection_tool;            // Advection calculation
 		diffusion diffusion_tool;            // Diffusion calculation
 		stretching stretching_tool;          // Stretching calculation
@@ -113,7 +113,7 @@ int main(int argc, char const *argv[])
 	geom_tool.generateBody(bodyList);
 	
 	// Save all body data
-	for (int i = 0; i < N_BODY; i++) 
+	for (int i = 0; i < N_BODY; i++)
 	save_manager.save_body_state(bodyList[i], std::to_string(i+1), 0);
 
 	
@@ -144,9 +144,12 @@ int main(int argc, char const *argv[])
 
 	// ========================= Physical Region =========================
 	// *******************************************************************
+	
+	/* Still no code lies here ... */
+	
 	// Initialization the chi data
-	// penalization_tool.initialize();		[Create a chi calculation] [Already done in initialization sub.]
-	// ** Vibrational Parameter Definition 	[FURTHER WORK see most bottom part]
+	// penalization_tool.initialize();			// [Create a chi calculation] [Already done in initialization sub.]
+	// ** Vibrational Parameter Definition 	[FURTHER WORK, see most bottom part, outside the main block]
 	
 	
 	// ===================== Pre Processing Summary ======================
@@ -223,21 +226,25 @@ int main(int argc, char const *argv[])
 			{
 				/*
 				Sequence of solving computation:
-				1. Particle Redistribution  -> Structured particle distribution
-				2. Velocity calculation     -> Structured particle distribution
+				1. Particle Redistribution  [Structured particle distribution]
+				2. Velocity calculation     [Structured particle distribution]
 				   -> Calculating rotational velocity
 				   -> Calculating total velocity by helmholtz decomposition
-				   -> Saving particle step [The best stage to save particle]
-				3. Penalization             -> Structured particle distribution
-				   -> Saving particle force [Must be save after penalization]
-				   -> Saving particle step [Alternative stage]
-				4. Perform Advection        -> Unstructured particle distribution 
-				5.1 Perform Diffusion       -> Unstructured particle distribution
-				   -> Saving particle step [Unstructured distribution]
-				5.2 Perform Stretching      -> Unstructured particle distribution
-				   -> Saving particle step [Unstructured distribution]
+				   -> Saving particle step 		[The best stage to save particle]
+				3. Penalization             [Structured particle distribution]
+				   -> Saving particle force 	[Must be save after penalization]
+				   -> Saving particle step 		[Alternative stage]
+				4. Perform Advection        [Unstructured particle distribution]
+				5.1 Perform Diffusion       [Unstructured particle distribution]
+				   -> Saving particle step
+				5.2 Perform Stretching      [Unstructured particle distribution]
+				   -> Saving particle step
 				
 				Try to rearrange the solver seq. 3->4->5->1->2
+
+				Note on force calculation:
+					> Penalization force calculation type must be calculated right after the penalization take place
+					> The other type of force calculation still on investigation
 				*/
 				
 				// SOLVER SEQUENCE : 3 -> 4 -> 5 -> 1 -> 2
@@ -246,23 +253,37 @@ int main(int argc, char const *argv[])
 				// [3] Perform penalization using Brinkmann: Penalize the velocity in body domain
 				penalization_tool.get_penalization(particle, bodyList, step);
 
-				// save_manager.save_par_state(particle, "AftPen_"+std::to_string(step), 0);	// Saving particle data
-
-				// // ================ Barrier Mark =================
-				// // [!] TODO: Saving Data Force 
-				// force_tool.force_calc(particle, bodyList[0], step, 2);	// Penalization mode
+				// ================ Barrier Mark - Data Saving =================
+				// [!] TODO 1: Saving Data Force 
+				force_tool.force_calc(particle, bodyList, step, 2, "aftPen");	// Penalization mode
+				
+				// [!] TODO 2: Saving Particle Data
+				if ((step % Pars::save_inv == 0)){
+					// Saving particle data
+					std::string DataName = utility.saveName(step);		// Write data file name
+					// DataName = "aftPen_" + DataName;
+					save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				}
 				
 				// =============== SOLVER STEP [4] ===============
-				// [4] Convection/Advection Sub-step: Perform the particle advection
-				advection_tool.main_advection(particle);      	// ! later: do 2nd order scheme
+				// [4] Convection or Advection Sub-step: Perform the particle advection
+				advection_tool.main_advection(particle);      			// [!] later: do 2nd order scheme
 				
 				// =============== SOLVER STEP [5.1] ===============
 				// [5.1] Diffusion Sub-step: Calculate the vorticity diffusion & time integration
-				if (DIM == 2) diffusion_tool.main_diffusion(particle); 		// ! later: do 2nd order scheme
+				if (DIM == 2) diffusion_tool.main_diffusion(particle); 	// [!] later: do 2nd order scheme
 
 				// =============== SOLVER STEP [5.2] ===============
 				// [5.2] Stretching Sub-step: Calculate the vorticity stretching & time integration
 				if (DIM == 3) stretching_tool.calc_diff_stretch(particle);
+
+				// // [!] TODO 2: Saving Particle Data
+				// if ((step % Pars::save_inv == 0)){
+				// 	// Saving particle data
+				// 	std::string DataName = utility.saveName(step);		// Write data file name
+				// 	DataName = "aftStr_" + DataName;
+				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				// }
 
 				// =============== SOLVER STEP [1] ===============
 				// [1] Particle redistribution: rearrange the particle distribution by interpolating vorticity
@@ -271,32 +292,47 @@ int main(int argc, char const *argv[])
 					remesh_tool.get_remeshing(particle, nodeGridList, step, bodyList);
 				}
 
-				// save_manager.save_par_state(particle, "AftRmsh_"+std::to_string(step), 0);	// Saving particle data
+				// // [!] TODO 2: Saving Particle Data
+				// if ((step % Pars::save_inv == 0)){
+				// 	// Saving particle data
+				// 	std::string DataName = utility.saveName(step);		// Write data file name
+				// 	DataName = "aftRmsh_" + DataName;
+				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				// }
 
 				// =============== SOLVER STEP [2] ===============
-				// [2] Velocity calculation by poisson/biot savart: solving Rotational Velocity & Stretching
+				// [2] Velocity calculation by biot savart: solving Rotational Velocity & Stretching
 				velocity_tool.get_velocity(particle, step);
+
+				// // [!] TODO 2: Saving Particle Data
+				// if ((step % Pars::save_inv == 0)){
+				// 	// Saving particle data
+				// 	std::string DataName = utility.saveName(step);		// Write data file name
+				// 	DataName = "aftVel_" + DataName;
+				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				// }
 
 			}	// End of the solver calculation
 
 			// *********************** POST PROCESSING ***********************
-			// [1] Saving Data Force 
-			if (Pars::flag_pressure_calc == true){
-				// Calculate the pressure
-				pressure_tool.get_pressure(particle);
-			}
-			force_tool.force_calc(particle, bodyList[0], step, 2);
+			/** NOTE: The post processing contents are put right after the penalization calculation */
+			// // [1] Saving Data Force 
+			// if (Pars::flag_pressure_calc == true){
+			// 	// Calculate the pressure
+			// 	pressure_tool.get_pressure(particle);
+			// }
+			// force_tool.force_calc(particle, bodyList, step, 2, "force");
 
 			// [2] Save the particle data at given step interval
-			if ((step % Pars::save_inv == 0)){
-				// Saving particle data
-				std::string DataName = utility.saveName(step);		// Write data file name
-				save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+			// if ((step % Pars::save_inv == 0)){
+			// 	// Saving particle data
+			// 	std::string DataName = utility.saveName(step);		// Write data file name
+			// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
 				
-				// Saving Residual
-				if (Pars::flag_save_residual == true)
-				utility.saveResidual(particle, step);
-			}
+			// 	// Saving Residual
+			// 	if (Pars::flag_save_residual == true)
+			// 	utility.saveResidual(particle, step);
+			// }
 
 			// [3] Update the particle count
 			minParticleNum = std::min<int>(minParticleNum, particle.num);
@@ -314,11 +350,21 @@ int main(int argc, char const *argv[])
 				if (step == 0){
 					_write.open("output/Simulation_Time.csv");
 					_write << "iteration,sim_time,par_num,comp_time,cum_comp_time\n";
-					_write << step << "," << step * Pars::dt << "," << particle.num << "," << curr_comp_time << "," << cum_comp_time << "\n";
+					_write <<  "" << step
+						   << "," << step * Pars::dt
+						   << "," << particle.num
+						   << "," << curr_comp_time
+						   << "," << cum_comp_time
+						   << "\n";
 					_write.close();
 				}else{
 					_write.open("output/Simulation_Time.csv", std::ofstream::out | std::ofstream::app);
-					_write << step << "," << step * Pars::dt << "," << particle.num << "," << curr_comp_time << "," << cum_comp_time << "\n";
+					_write <<  "" << step
+						   << "," << step * Pars::dt
+						   << "," << particle.num
+						   << "," << curr_comp_time
+						   << "," << cum_comp_time
+						   << "\n";
 					_write.close();
 				}
 			}
@@ -326,13 +372,13 @@ int main(int argc, char const *argv[])
 			// ********************** ITERATION SUMMARY **********************
 			// Displaying the simulation time for each iteration
 			printf("\n%s**************** Iteration Summary ****************%s", FONT_GREEN, FONT_RESET);
-			printf("\n<!> Current iteration sim. time      : %9.3f s", step * Pars::dt);
-			printf("\n<!> Current iteration comp. time     : %9.3f s", curr_comp_time);
-			printf("\n<!> Cumulative computational time    : %9.3f s\n", cum_comp_time);
+			printf("\n<!> Current iteration sim. time   : %12.2f s", step * Pars::dt);
+			printf("\n<!> Current iteration comp. time  : %12.2f s", curr_comp_time);
+			printf("\n<!> Cumulative computational time : %12.2f s\n", cum_comp_time);
 			
-			printf("\n<!> Particle count                   : %9d", particle.num);
-			printf("\n<!> Iteration to go                  : %9d\n", Pars::max_iter - step);
-
+			printf("\n<!> Particle count                : %12d", particle.num);
+			printf("\n<!> Iteration to go               : %12d\n", Pars::max_iter - step);
+			
 			// Prediction time to finish the simulation
 			if (Pars::flag_disp_pred_time == true){
 				utility.predictCompTime(step, curr_comp_time);
@@ -342,7 +388,7 @@ int main(int argc, char const *argv[])
 		}
 		
 		// HERE: Outside the iteration loop
-		printf("%s\n<!> The iteration has just finished successfully! %s\n", FONT_GREEN, FONT_RESET);
+		// printf("%s\n<!> The iteration has just finished successfully! %s\n", FONT_GREEN, FONT_RESET);
 
 
 		// ======================== Final Data Saving ========================
@@ -361,28 +407,38 @@ int main(int argc, char const *argv[])
 		
 		// ======================== Simulation Summary =======================
 		// *******************************************************************
-		printf("\n+-------------- Simulation Summary ---------------+\n");
-		time_t now = time(0);
+		time_t now = time(0);			// Present timing
+
+		printf("\n%s+-------------- Simulation Summary ---------------+%s\n", FONT_BLUE, FONT_RESET);
 		printf("Simulation end at     : %s", std::ctime(&now));
-		printf("Minimum number of particle            : %8d \n", minParticleNum);
-		printf("Maximum number of particle            : %8d \n", maxParticleNum);
-		printf("Total iteration number                : %8d \n", Pars::max_iter);
+		printf("Minimum number of particle           : %9d \n", minParticleNum);
+		printf("Maximum number of particle           : %9d \n", maxParticleNum);
+		printf("Total iteration number               : %9d \n", Pars::max_iter);
 		
 		if (cum_comp_time < 60.0){
-			printf("Total computational time              : %8.2f s \n", cum_comp_time);
+			// If simulation runs below than 1 minute
+			printf("Total computational time             : %9.2f s \n", cum_comp_time);
 		}else if (cum_comp_time/60.0 < 60.0){
+			// If simulation runs below than 1 hour
 			int time_m = cum_comp_time/60;
 			double time_s = cum_comp_time - (time_m*60);
-			printf("Total computational time              :%2dm %5.2f s \n", time_m, time_s);
+			printf("Total computational time             : %2dm %5.2f s \n", time_m, time_s);
 		}else{
-			printf("Total computational time              : %8.2f h \n", cum_comp_time/3600.0);
+			// If simulation runs longer than 1 hour
+			printf("Total computational time             : %9.2f h \n", cum_comp_time/3600.0);
 		}
 
-		printf("Average iteration computing time      : %8.2f s \n", cum_comp_time/Pars::max_iter);
-		printf("Max. global Courant number (C_max)    : %8.2f \n", CourMax);
-		printf("Max. global Diff. number (phi_max)    : %8.2f \n", DiffMax);
-		printf("Max. global Stab. number (Re_h_max)   : %8.2f \n", StabMax);
-		printf("+-------------------------------------------------+\n");
+		if (Pars::opt_start_state == 0){
+			printf("Average iteration computing time     : %9.2f s \n", cum_comp_time/Pars::max_iter);
+		}
+		if (Pars::opt_start_state == 1){
+			printf("Average iteration computing time     : %9.2f s \n", cum_comp_time/(Pars::max_iter - Pars::resume_step));
+		}
+
+		printf("Max. global Courant number (C_max)   : %9.2f \n", CourMax);
+		printf("Max. global Diff. number (phi_max)   : %9.2f \n", DiffMax);
+		printf("Max. global Stab. number (Re_h_max)  : %9.2f \n", StabMax);
+		printf("%s+-------------------------------------------------+%s\n", FONT_BLUE, FONT_RESET);
 
 		// Simulation is done successfully!
 		printf("%s<!> The simulation is finished successfully! %s\n", FONT_GREEN, FONT_RESET);
@@ -403,16 +459,16 @@ int main(int argc, char const *argv[])
    +) Remember to free the memory of malloc variable
 */
 
-
-// NEED TO BE DONE
-/*
+/*	List of task NEED TO BE DONE
 	> Generate particle		[DONE]
-	> Adaptation method		[DONE] Also done the linking, but not the cell list, (further a do?)
+	> Adaptation method		[DONE] Also done the linking, but not the cell list, (further a do? The answer is not)
 	> Link the remeshing 	[DONE]
-	> Redistribution 		[DONE] -> CHECK LSMPS (adjust paralel)
+	> Redistribution 		[DONE] -> CHECK LSMPS (have been adjusted with paralel)
 	> Neigbor evaluation	[DONE]
-	> Set a paralel computing 
-	//    #pragma omp parallel for
+	> Set a paralel computing  [ALMOST DONE] -> There are something strange things by using parallel
+		>>> Syntax	: #pragma omp parallel for
+		- Too high number of cores used creates an unstable sequence, break ups the simulation data
+		- At some point (a parallel loop deep inside the loop), the parallel make a sequence hold so it takes longer time than usual instead
 	> Check all physical subroutine
 		- Velocity ? (Check the vector data size)
 		- Penalization (adjust to the number of body part)

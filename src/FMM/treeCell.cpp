@@ -2,6 +2,8 @@
 
 #define ROOT_LEVEL 0
 
+#define EPSILON_TOLERANCE 10e-10
+
 
 // =====================================================
 // +-------------------- Utilities --------------------+
@@ -52,7 +54,7 @@ int TreeCell::get_level(const long long int &_ID) const{
     }
     
     // Direct level calculation (convert the double into integer or literally flooring)
-    int level = (std::log(1 + _ID*(this->chdNum - 1)) / std::log(this->chdNum)) + (10 * __DBL_EPSILON__);
+    int level = (std::log(1 + _ID*(this->chdNum - 1)) / std::log(this->chdNum)) + (EPSILON_TOLERANCE);
 
     // Check for bad truncation at current cell
     /** Truncation error problem example
@@ -641,11 +643,11 @@ void TreeCell::intList(const int &currID, std::vector<int>& ID_list_1, std::vect
     // Create an alias to the current cell data (Note that the current cell must be a leaf cell)
     const Cell *currCell = this->treeData.at(currID);
     
-    // Exception 2: only evaluates leaf cell only
-    if (currCell->isLeaf == false){
-        ERROR_LOG << "The cell " << currID << " is not leaf!\n";
-        throw std::invalid_argument("ERROR [TREE CELL]: Internal list calculation is prohibited!");
-    }
+    // // Exception 2: only evaluates leaf cell only
+    // if (currCell->isLeaf == false){
+    //     ERROR_LOG << "The cell " << currID << " is not leaf!\n";
+    //     throw std::invalid_argument("ERROR [TREE CELL]: Internal list calculation is prohibited!");
+    // }
 
     // Reset the neighbor list
     ID_list_1.clear();
@@ -738,7 +740,7 @@ void TreeCell::intList(const int &currID, std::vector<int>& ID_list_1, std::vect
             std::vector<int> _chdIDs = this->get_childID(nghID);
 
             // A length bound for adjacent cell (the cell with distance below this length is catagorized as adjacent cell)
-            double adjacent_dist = ((currSize + (nghCell->length / 2.0)) / 2.0) + (10*__DBL_EPSILON__);
+            double adjacent_dist = ((currSize + (nghCell->length / 2.0)) / 2.0) + (EPSILON_TOLERANCE);
 
             /** The size of adjacent distance
              *     Curr   Adjacent
@@ -905,7 +907,7 @@ void TreeCell::extList(const int &currID, std::vector<int>& ID_list_2, std::vect
             std::vector<int> _chdIDs = this->get_childID(nghID);
 
             // Check the relative position of each child cell toward current cell
-            double min_dist = currSize + (10 * __DBL_EPSILON__);
+            double min_dist = currSize + (EPSILON_TOLERANCE);
             
             /** The size of minimum distance
              *    _______________
@@ -989,7 +991,7 @@ void TreeCell::extList(const int &currID, std::vector<int>& ID_list_2, std::vect
         
         // Check whether the cell is well seperated to the current cell
         // The current cell is a leaf cell
-        double min_dist = ((nghCell->length + currSize) / 2.0) + (10 * __DBL_EPSILON__);
+        double min_dist = ((nghCell->length + currSize) / 2.0) + (EPSILON_TOLERANCE);
 
         /** The size of minimum distance
          *    ___________ 

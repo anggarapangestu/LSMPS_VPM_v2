@@ -18,7 +18,7 @@ void remeshing::redistribute_particles(Particle &parEval)
 	// ========== Particle Redistribution ========== //
 	// ============================================= //
     /** To Do:
-     *  > Interpolate particle [vorticity] to base particle\
+     *  > Interpolate particle [vorticity] to base particle
      *  > Update the other particle properties
      *     - Coordinate, num, : Take the value from base particle value
      *        level, ngh, node relation
@@ -55,8 +55,8 @@ void remeshing::redistribute_particles(Particle &parEval)
     //  > The [inter neighbor] is different if adapted and not adapted
     //     If adapted it already obtain all
 
-    // Computational time manager
-    double _time;
+    // // Computational time manager
+    // double _time;
 
 
     // PROCEDURE 1: Neighbor Alliasing
@@ -123,7 +123,13 @@ void remeshing::redistribute_particles(Particle &parEval)
 
     // PROCEDURE 2: Interpolation of Vorticity
     // ************
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // Perform LSMPS interpolation of vorticity
     LSMPSb lsmpsb;
@@ -155,16 +161,29 @@ void remeshing::redistribute_particles(Particle &parEval)
     }
     
     // Time manager console log
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Calculating LSMPS interpolation:   [%f s]\n", _time);
     
     
     if (DIM == 2){
         // Update the vortex strength <?> Should be changed next
-        this->particleBase->gz.clear();this->particleBase->gz.resize(this->particleBase->num,0.0);
+        // Create base particle alias
+        Particle &_p = *this->particleBase;
+
+        // Reset the size of vortex strength
+        _p.gz.clear();_p.gz.resize(_p.num,0.0);
+
+        // Calculate the vortex strength
         #pragma omp parallel for
-        for (int _i = 0; _i < this->particleBase->num; _i++){
-            this->particleBase->gz[_i] = this->particleBase->vorticity[_i] * std::pow(this->particleBase->s[_i],2.0);
+        for (int _i = 0; _i < _p.num; _i++){
+            _p.gz[_i] = _p.vorticity[_i] * std::pow(_p.s[_i], 2.0);
         }
     }
     else if (DIM == 3){
@@ -178,16 +197,23 @@ void remeshing::redistribute_particles(Particle &parEval)
         // Calculate the vorticity
         #pragma omp parallel for
         for (int _i = 0; _i < _p.num; _i++){
-            _p.vorticity[_i] = std::sqrt(_p.vortx[_i]*_p.vortx[_i] + 
-                                         _p.vorty[_i]*_p.vorty[_i] + 
-                                         _p.vortz[_i]*_p.vortz[_i]);
+            _p.vorticity[_i] = std::sqrt(
+                                _p.vortx[_i]*_p.vortx[_i] + 
+                                _p.vorty[_i]*_p.vorty[_i] + 
+                                _p.vortz[_i]*_p.vortz[_i] );
         }
     }
 
     
     // PROCEDURE 3: Update Active Particle
     // ************    
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Update the redistribute data into the particle variable
     this->set_particle_sign();
@@ -196,7 +222,14 @@ void remeshing::redistribute_particles(Particle &parEval)
     parEval = *(this->particleBase);
     parEval.isAdapt = this->adap_flag;
 
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Re-assigning the particle data:    [%f s]\n", _time);
 
 
@@ -250,8 +283,8 @@ void remeshing::redistribute_active_particles(Particle &parEval)
     //  > The [inter neighbor] is different if adapted and not adapted
     //     If adapted it already obtain all
 
-    // Computational time manager
-    double _time;
+    // // Computational time manager
+    // double _time;
 
 
     // PROCEDURE 1: Neighbor Alliasing
@@ -292,7 +325,13 @@ void remeshing::redistribute_active_particles(Particle &parEval)
 
     // PROCEDURE 2: Colecting active particle
     // ************
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     std::vector<int> activeID;          // Point to the original particle ID
     std::vector<int> tempID(this->particleBase->num, -1);    // Point the ID to active index
@@ -376,7 +415,14 @@ void remeshing::redistribute_active_particles(Particle &parEval)
     }
 
     // Time manager console log
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Collecting the active particle:    [%f s]\n", _time);
 
 
@@ -409,7 +455,13 @@ void remeshing::redistribute_active_particles(Particle &parEval)
 
     // PROCEDURE 3: Interpolation of Vorticity
     // ************
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Perform LSMPS interpolation of vorticity
     LSMPSb lsmpsb;
@@ -445,7 +497,14 @@ void remeshing::redistribute_active_particles(Particle &parEval)
     }
     
     // Time manager console log
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Calculating LSMPS interpolation:   [%f s]\n", _time);
     
     
@@ -505,7 +564,13 @@ void remeshing::redistribute_active_particles(Particle &parEval)
     
     // PROCEDURE 4: Update Active Particle
     // ************    
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Update the redistribute data into the particle variable
     this->set_particle_sign();
@@ -514,7 +579,14 @@ void remeshing::redistribute_active_particles(Particle &parEval)
     parEval = *(this->particleBase);
     parEval.isAdapt = this->adap_flag;
 
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Re-assigning the particle data:    [%f s]\n", _time);
     return;
 }
@@ -536,7 +608,7 @@ void remeshing::set_particle_sign(){
     // **Evaluate the active flag particle
     this->particleBase->isActive.clear();this->particleBase->isActive.resize(this->particleBase->num,false);
     double SIGNIFICANCE_LIMIT = Pars::active_sig*vor_max;
-    #pragma omp parallel for
+    // #pragma omp parallel for
     for (int i = 0; i < this->particleBase->num; i++){
         double vor = std::abs(this->particleBase->vorticity[i]);
         this->particleBase->isActive[i] = (vor >= SIGNIFICANCE_LIMIT) ? true : false;
@@ -545,7 +617,7 @@ void remeshing::set_particle_sign(){
     
     // **Set the vorticity to zero for non active particle
     if (DIM == 2){
-        #pragma omp parallel for
+        // #pragma omp parallel for
         for (int i = 0; i < this->particleBase->num; i++){
             if (this->particleBase->isActive[i] == false){
                 // To prevent truncated error, set the value of vorticity to 0.0
@@ -578,7 +650,7 @@ void remeshing::set_particle_sign(){
         // }
     }
     else if (DIM == 3){
-        #pragma omp parallel for
+        // #pragma omp parallel for
         for (int i = 0; i < this->particleBase->num; i++){
             if (this->particleBase->isActive[i] == false){
                 // To prevent truncated error, set the value of vorticity to 0.0

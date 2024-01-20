@@ -39,7 +39,14 @@ void neighbor::create_temp_grid(const Particle& _par, NghBaseGrid &_grid){
 void neighbor::neigbor_search(Particle &parEval, const GridNode &_baseGrid){
     // Print log to console
     printf("Evaluating neighbor ...\n");
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+
 
     // Direct neighbor search evaluation
     if (Pars::opt_neighbor == 0){
@@ -97,7 +104,14 @@ void neighbor::neigbor_search(Particle &parEval, const GridNode &_baseGrid){
     }
     
     // Neighbor search summary time display
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Neighbor search computation time:  [%f s]\n", _time);
 }
 
@@ -113,14 +127,27 @@ void neighbor::neigbor_search(Particle &parEval, const GridNode &_baseGrid){
 void neighbor::neigbor_search(Particle& _evalPar, Particle &_srcPar){
     // Print log to console
     printf("Evaluating inter search neighbor ...\n");
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // Evaluate the neighbor
     InterSearchNgh _interSearch;
     _interSearch.find_neighbor(_srcPar, _evalPar, _evalPar.neighbor);
     
     // Neighbor search summary time display
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Neighbor search computation time:  [%f s]\n", _time);
 }
 

@@ -70,15 +70,19 @@ private:
 
     // The force calculation
     void direct_force(const Particle& par, const Body& body);   // The direct force calculation
-    void pen_force(const Particle& par, const Body& body);      // Penalization force calculation
+    // void pen_force(const Particle& par, const Body& body);      // Penalization force calculation
+	void pen_force(const Particle& par, const std::vector<Body> &body, std::string name);      // Penalization force calculation
     void imp_force(const Particle& par, const Body& body);      // The impulse force calculation
 
     void force_linear_impulse(int it, int np, const std::vector<double> &xp, const std::vector<double> &yp,
 							  const std::vector<double> &gpz, const std::vector<double> &sp);
 
 public:
-    // The force calculation manager
-    void force_calc(const Particle& par, const Body& body, int step, int _type);     // Direct force calculation
+    // // The force calculation manager
+    // void force_calc(const Particle& par, const Body& body, int step, int _type);     // Direct force calculation
+
+	// The force calculation manager
+	void force_calc(const Particle& _particle, const std::vector<Body> &_bodyList, int _step, int _type, std::string name);
 
 
     // void grid_data(int np, std::vector<double> &xp, std::vector<double> &yp, std::vector<double> &sp, std::vector<double> &gpz,

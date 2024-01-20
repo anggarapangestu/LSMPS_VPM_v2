@@ -22,8 +22,8 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     // Initial Adaptation Log
     MESSAGE_LOG << "Initial total nodes : " << baseGrid.nodeMap.size() << "\n";
     
-    // Internal time manager
-    double _time;
+    // // Internal time manager
+    // double _time;
 
     /* PROCEDURE !!
         1. Set up and initialize the parameter in adaptation procedure
@@ -43,7 +43,13 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     // Set up and initialize the parameter in adaptation procedure
     
     // Time counter
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // Set the selected property to be evaluated for adaptation
     // *NOTE : Change the property if necessary
@@ -69,7 +75,14 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
 
     // Time counter
     // Display calculation time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<+> Adapt 1: Initialize    : %f s\n", _time);
 
     // // [DEBUG] Save the temporary grid
@@ -146,7 +159,13 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     int refinedNode = 0;        // Refinement counter for console log
 
     // Time counter
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     
     // MESSAGE_LOG << "Grid node refinement by adaptation!\n";
     int iter = 0;               // For debugging saving file
@@ -288,7 +307,14 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     }
 
     // Display calculation time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<+> Adapt 2: Refinement    : %f s\n", _time);
     
     
@@ -328,7 +354,13 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     // MESSAGE_LOG << "Evaluate NLD criteria and refinement\n";
     
     // Time counter
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     
     // LOOP [1]: Loop until no node left on the queue
     bool stop = false;      // Loop trigger
@@ -687,7 +719,14 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     // printf("<-> Node refinement computational time [%f s]\n\n", (double)_time/CLOCKS_PER_SEC);
     
     // Display calculation time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<+> Adapt 3: NLD Check     : %f s\n", _time);
 
     // // [DEBUG] Check the temporary grid
@@ -738,7 +777,13 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     iter = 0;
 	
     // Time counter
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     
     // At this stage, all compression node in temporary GRID is not existed yet
     // *[1] Perform node compression
@@ -992,7 +1037,14 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     }
 
     // Display calculation time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<+> Adapt 4: Compression 1 : %f s\n", _time);
 
     // Compress the current NODE
@@ -1009,7 +1061,13 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
 
     // MESSAGE_LOG << "Generate particle inside compressed node\n";
     // Time counter
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 	
     // *[2] Generate particel at each compressed node
     for (auto &[_currID, _currFlag] : this->compressList){
@@ -1078,7 +1136,14 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     }
 
     // Display calculation time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<+> Adapt 5: Compression 2 : %f s\n", _time);
 
     // _time = clock() - _time;
@@ -1095,6 +1160,16 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     // std::cout << " >>> Compression : " << this->compressList.size() << "\n\n";
     // std::cout << FONT_RESET;
 
+
+    // No need adaptation if there is no refinement and compression
+    if (this->refineList.empty() && this->compressList.empty()){
+        std::cout << FONT_MAROON << "[FINAL LOG] "
+                  << FONT_RESET  << "Be carefull, adaptation is cancelled!!!\n";
+        // Prevent memory leak
+        delete this->newPar;
+        return false;
+    }
+
     
     // PROCEDURE 5!
     // ************
@@ -1104,7 +1179,13 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
 
     // MESSAGE_LOG << "[DATA 1] Merge the particle data!!\n";
     // Time counter
-    _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // *[1] Take all particle inside idle list into the new partilce
     for (auto &[_ID,_flag] : this->idleList){
@@ -1189,11 +1270,17 @@ bool GridNodeAdapt::get_adaptation(GridNode &baseGrid, const Particle &tempPar, 
     this->tempGrid.nodeMap.clear();
 
     // Display calculation time
-    _time = omp_get_wtime() - _time;
-	printf("<+> Adapt 6: Data Update   : %f s\n", _time);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     
     // *END OF PROCEDURE 5*
-    baseGrid.saveLeafGrid(baseGrid, "AdaptationFinal");
+    // baseGrid.saveLeafGrid(baseGrid, "AdaptationFinal");
 
     MESSAGE_LOG << "Final total nodes : " << baseGrid.nodeMap.size() << "\n";
     std::cout << FONT_GREEN << "[FINAL LOG] Adaptation executed successfully!!!" << FONT_RESET << "\n" ;

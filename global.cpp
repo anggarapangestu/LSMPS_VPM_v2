@@ -19,9 +19,9 @@ namespace Pars
     // =========================================
     // #pragma region SIMULATION_FLAG
         // Data Write Flag
-        extern const bool flag_save_body = _O_;         // [I] The flag to save body data
+        extern const bool flag_save_body = _X_;         // [I] The flag to save body data
         extern const bool flag_save_cell = _X_;         // [I] The flag to save cell list data (*ADAPTIVE CELL LIST particle container)
-        extern const bool flag_save_node = _O_;         // [I] The flag to save node list data (*GRID NODE particle container)
+        extern const bool flag_save_node = _X_;         // [I] The flag to save node list data (*GRID NODE particle container)
         extern const bool flag_save_ngh_par   = _X_;    // [I] The flag to save neighbor particle list
         extern const bool flag_save_ngh_num   = _X_;    // [I] The flag to save neighbor number
         extern const bool flag_save_parameter = _O_;    // [I] The flag to save simulation parameter
@@ -62,7 +62,7 @@ namespace Pars
                     5:= Grid Node Based
                 */
 
-        extern const std::vector<int> opt_body = {2,5,4,1,4};
+        extern const std::vector<int> opt_body = {1,2,4,1,4};
                 /* [O] The body type option:
                             2D simulation   |   3D simulation   
                         --------------------|-------------------
@@ -89,7 +89,7 @@ namespace Pars
                     2:= Iterative brinkmann
                 */
 
-        extern const int opt_force_type = 1;
+        extern const int opt_force_type = 1;            // Still not used (directly selected in the calculation)
                 /* [O] The force calculation type;\
                     0:= No force calculation;\
                     1:= By direct method;\
@@ -123,10 +123,10 @@ namespace Pars
     // +----------- Simulation Domain Parameter -----------+
     // =====================================================
     // #pragma region DOMAIN_PARAMETER
-        extern const double lxdom = 20.0e0;     // [I] Initial domain length on x-axis
-        extern const double lydom = 10.0e0;     // [I] Initial domain length on y-axis
+        extern const double lxdom = 25.0e0;     // [I] Initial domain length on x-axis
+        extern const double lydom = 12.0e0;     // [I] Initial domain length on y-axis
         extern const double lzdom = 0.0e0;      // [I] Initial domain length on z-axis
-        extern const double xdom  = 2.5e0;      // [I] Negative x-direction domain length
+        extern const double xdom  = 5.0e0;      // [I] Negative x-direction domain length
         extern const double xcenter = 0.0e0;    // [I] Initial domain center (x-axis), default 0.0
         extern const double ycenter = 0.0e0;    // [I] Initial domain center (y-axis), default 0.0
         extern const double zcenter = 0.0e0;    // [I] Initial domain center (z-axis), default 0.0
@@ -167,9 +167,9 @@ namespace Pars
     // #pragma region COMPUTATIONAL_PARAMETER
         // Basic parameter
         extern const double sigma    = 0.01e0;      // [I] Particle core size; <?> default: 0.0025, dt~(1/2)*sigma - (1/3)*sigma
-        extern const double dt       = 0.005e0;      // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
+        extern const double dt       = 0.005e0;     // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
         extern const double sim_time = 200.0e0;     // [I] The total simulation time
-        extern const int resume_step = 3300; //39600;//      // [I] Iteration step ID of data for resuming simulation
+        extern const int resume_step = 38600; //39600;//      // [I] Iteration step ID of data for resuming simulation
 
         // Stability Criteria
         extern const double phi_s     = 0.595e0;    // [A] (Ploumhans [2000]) for the Euler explicit scheme,phi_s = 0.595, !for the Adams–Bashforth 2 scheme, phi_s = 0.297, BUt can not use AB2 due to redistribution changes np--> need Biot-Savart again
@@ -181,10 +181,10 @@ namespace Pars
         //     std::sqrt(dt * vis / phi_s) / sigma;
         
         // **Particle redistribution constant interval evaluation
-        extern const int rmsh_inv = 1;              // [I] Step interval for remeshing evaluation
+        extern const int rmsh_inv  = 1;             // [I] Step interval for remeshing evaluation
         extern const int adapt_inv = 5;             // [I] Step interval for adaptation evaluation
         extern const int ngh_diff_level = 1;        // [I] Maximum neighbor node different level (for NDL criteria)
-        extern const double adapt_tol = 5.0e-2;     // [I] The adaptation tolerance (factor to set the window difference of value between levels)
+        extern const double adapt_tol  = 5.0e-2;    // [I] The adaptation tolerance (factor to set the window difference of value between levels)
         extern const double active_sig = 1.0e-6;    // [I] The significant ratio toward the source maximum value [*vorticity] for an active particle
 
     // #pragma endregion
@@ -197,8 +197,8 @@ namespace Pars
         extern const double r_buff = 1.1;           // [L] The buffer region radius factor [1.2 is sufficient]
         // extern const double body_ext = 15.0*sigma;  // [I] The body extention distance to evaluate the chi and active particle (must bigger than Pars::numpen * Pars::sigma)
         extern const double body_ext = 0.1*Pars::Df;// [I] The body extention distance to evaluate the chi and active particle (must bigger than Pars::numpen * Pars::sigma)
-        extern const double mp_shift = 1.0*sigma;   // [L] A distance shift from the midplane to create the unbalance calculation [1 core size]
-        extern const int max_level = 4;             // [I] Number of resolution level
+        extern const double mp_shift = 0.5*sigma;   // [L] A distance shift from the midplane to create the unbalance calculation [1 core size but customable]
+        extern const int max_level = 3;             // [I] Number of resolution level
                                                         // -> Level is counted from 0 as the largest particle size
                                                         // -> Maximum level is the finest particle size (max_level = 0 -> single resolution)
                                                         // -> The number of resolution level is 'max_level' + 1
@@ -266,14 +266,14 @@ namespace Pars
     // ================================================
     // #pragma region PENALIZATION_PARAMETER
         extern const int opt_pen = 1;       // [O] The penalization type option (*method from Rasmussen 2011)
-                                            //    1:= Implicit penalization [lambda = 1.0e4];
-                                            //    2:= Semi-implicit penalization;
-                                            //    3:= Explicit penalization [lambda = 1.0/dt]
-        int opt_kaipen = 0;                 // [O] The option for penalization masking χ (chi)
+                                            //    1:= Implicit penalization         [lambda = 1.0e4]
+                                            //    2:= Semi-implicit penalization    [lambda = 1.0e4]
+                                            //    3:= Explicit penalization         [lambda = 1.0/dt] to impose the solid velocity
+        int opt_kaipen = 0;                 // [O] The option for penalization masking χ (chi): [!] Input must not be changed from 0
                                             //    0:= No chi recalculation;
-                                            //    1:= Recalculate by kai, to avoid singularities (*Rasmussen phD 2011)
+                                            //    1:= Recalculate by kai, to avoid singularities (*Rasmussen phD 2011) <!> Actually for semi implicit calculation <!>
         double lambda = 1.0e4;              // [I] Value of penalization constant
-        extern const int numpen = 6;        // [L] Number of particle from body surface for penalization domain evaluation (*6 from some reference)
+        // extern const int numpen = 6;        // [L] Number of particle from body surface for penalization domain evaluation (*6 from some reference)
         extern const double hmollif =       // [I] The half mollification length [sqrt(2)*sigma]
             1.0e0 * std::sqrt(2.0e0) * sigma;
         extern const int pen_iter = 10;     // [I] The penalization iteration for iterative brinkman type
@@ -293,9 +293,9 @@ namespace Pars
         extern const int ioptfmm = 1;           // [O] Selection of the velocity calculation method;
                                                 //    0:= Direct calculation,
                                                 //    1:= FMM accelerated
-        extern const int P_max = 12;            // [O] Number of the expansion order (P_max ~ log (e) / log(2) or error in order of 10^-3 for P_max = 10), This affect the computational time further for M2L calculation
-        extern const int par_count_max = 50;    // [I] Maximum number of all particle inside the cell
-        extern const int src_count_max = 30;    // [I] Maximum number of source particle inside the cell (The bigger will reduce M2L calculation)
+        extern const int P_max = 10;            // [O] Number of the expansion order (P_max ~ log (e) / log(2) or error in order of 10^-3 for P_max = 10), This affect the computational time further for M2L calculation
+        extern const int par_count_max = 75;    // [I] Maximum number of all particle inside the cell
+        extern const int src_count_max = 50;    // [I] Maximum number of source particle inside the cell (The bigger will reduce M2L calculation)
 
         // Old FMM parameter (*ABOUT TO DELETE)
         extern const int lmax = 7;              // [I] Max of FMM levels
@@ -504,7 +504,7 @@ namespace Pars
                     5:= Grid Node Based
                 */
 
-        extern const std::vector<int> opt_body = {1,5,4,1,4};
+        extern const std::vector<int> opt_body = {2,5,4,1,4};
                 /* [O] The body type option:
                             2D simulation   |   3D simulation   
                         --------------------|-------------------
@@ -818,71 +818,6 @@ namespace Pars
         extern const double i_star = 4.1;       //!! ROTATION PARAMETER, STILL BUGGED
         extern const double U_star = 6.6;       //!! ROTATION PARAMETER, STILL BUGGED
         extern const double tetha_nol = 15.0e0; //equilibrium angular position of spring [deg] //!! ROTATION PARAMETER, STILL BUGGED
-    // #pragma endregion
-
-    // #pragma region NOT_USED_PARAMETER
-    /* OLD DATA PARAMETER
-
-    // in case of opt_extra_data = 1/2:
-    // extern const double r_sigma = std::sqrt(sigma/pi);
-    // extern const double alpha = 0.8e0;                                   // (Overlaping factor)
-    // extern const double gamtrim = 1.0e-04;                               // parameter for Extruding blobs, ! 2D: 1.0e-04 Ploumhans 2000, 3D 1.0e-04 (Ploumhans [2002])
-    // extern const double re_trsh = 1.0e-04;                               // Re_h,trsh = 1.0e-04 (Ploumhans [2002]) 3D
-    // extern const double area  = pi*std::pow(Df,2)/4;                     // chord*length ! lz*ly ! Flatplate, if sphere  A= pi*Df^2/4
-
-    // extern const double x_new_1 = -5; 
-    // extern const double x_new_2 = 30;
-    // extern const double y_new_1 = -10;
-    // extern const double y_new_2 = 10;
-    // //Note: Final shape of multiblock domain will be following this formula  side x = ( lxdom + (2*10*Pars:sigma)) - 2*Pars::sigma. Y side will also adopt the formula
-
-
-    // // Multiresolution parameters
-    // extern const double c = 1.0;                // [I] [0.5, 0.9, 1.4] overlapping ration (?)
-    // extern const double D_0 = 2 * sigma;              // maximum core size:::4
-    // extern const double dcmin = 0.4;                  // minimum equivalent distance
-
-    // // DC PSE operators parameter ===================================== //
-    // extern const double beta = 2;
-    // extern const double epsilon = c * sigma;
-    // extern const int l_2_0_2 = 9;                 // moment condition for Q(2,0) or Q(0,2) with 2nd order accuracy
-    // extern const int l_2_0_4 = 20;                // moment condition for Q(2,0) or Q(0,2) with 4th order accuracy
-    // extern const int l_1_0_2 = 6;                 // moment condition for Q(1,0) or Q(0,1) with 2nd order accuracy
-    // extern const int l_1_0_4 = 15;                // moment condition for Q(1,0) or Q(0,1) with 4th order accuracy
-    // extern const int l_0_0_3 = 6;                 // moment condition for Q(0,0) with 3rd order accuracy
-
-    // in case of continue
-
-    // extern const int it_stop_full = 60166;         // the last file which have full data (before/at stop) (last file saved by comtime_sf or nt_sf), [changeable]
-
-    // // in case of opt_extra_data = 3 print extra data from common data, MUST run case 1/2 first:
-    // extern const int it_start = 0;                 // the first step you want to get extra data for postprocessing
-    // extern const int it_end   = 101 ;          // the last step you want to get extra data for postprocessing
-    // // in case of opt_extra_data = 2/3:
-    // extern const int opt_extra_pres      = 0;           // = 0/1  not/ print pressure on grid
-    // extern const int opt_extra_pres_wall = 0;      // = 0/1  not/ print pressure on surface of body
-
-    // // ====== BOX Generation for post-processing extra data =========== //
-    // extern const int opt_gdata_vel = 2;            // =1 Using Biot-savart calculate Velocity on grid via Vorticity Strength on grid, =2 Remeshing Velocity from particle velocity
-
-    // namespace geom
-    // {
-    // extern const int edge = 2;
-    // }
-
-    // extern const int opt_remesh_W = 1;              // =1 using M4', =2 Using M6, =3 M4 isotropic (Chatelain,P [2005]), =4 P14
-    // extern const int par_split = 5;                 // 4,5,7,9 only, otherwise just spreading core size
-    // extern const int parsplit = 4;                  //
-    // extern const int xlimit = 10000;                // in order to eliminate far field splitting
-    // extern const int opt_sptadapt = 1;              // = 1 using spatial_adaptation for CSM, =0 withou spatial_adaptation
-    // extern const int opt_search = 2;                // =1 using direct searching O(N^2); =2 using link_list O(N)
-    // extern const int it_start_les = 2;              // if  it_start_les =1, with zero gpx gpy gpz then velocity gradient dudx dudy ... = 0 at it =1, then strain(it =1)=0...=> Cr2 = NaN
-    // extern const int diffusion_opt = 0;             // PSE scheme. 0=original PSE, 1=DC-PSE
-
-    // extern const int iopt_inter = 1;       //
-    // extern const int par_ext = 1;          // =1(external flow case), =0(internal flow case)
-
-    */
     // #pragma endregion
 
 } // namespace Pars

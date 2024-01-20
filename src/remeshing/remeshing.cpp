@@ -28,30 +28,34 @@ void remeshing::get_remeshing(Particle &_par, GridNode &_gridNode, const int _st
 	
 	*/
 
-	/** Illustration of Data update between adaptation and redistribution
+	/** Illustration of data update between adaptation and redistribution
      *      PARTICLE DATA     |      ADAPTATION        |      REDISTRIBUTION
      *  ----------------------|------------------------|-------------------------
-     *   * Coordinate         | - Adapted              | - Change to base data                                                
+     *   * Coordinate         | - Adapted              | - Interpolated to base data
      *                        | - Store in the base    |       
      *   * Size               | - Set to old base      | - Update to new base
      *   * Num                | - New data             | - New data
      *   * Neigbor list       | - Connect to old base  | - Evaluate new
-     *   * Velocity           | [-]                    | - Resize with 0
-     *   * Pressure           | [-]                    | - Resize with 0
-     *   * Chi, ...           | [-]                    | - Resize with 0
-     *   * Vorticity          | [-]                    | - Interpolated to new 
-     *                        |                        |   position 
-     *   * Vortex             | [-]                    | - Recalculated from vorticity
-     *   * isActive           | [-]                    | - Re-evaluate from vorticity
-    */    
+     *   * Velocity           | - Resize with new num  | - Resize with 0
+     *   * Vorticity          | - Resize with new num  | - Interpolated to new position 
+     *   * Vortex strength    | - Resize with new num  | - Recalculated from vorticity
+     *   * Pressure           | [-]                    | [-]
+     *   * Particle flag      | - All flags is         | [-]
+	 *      > chi             |   re-evaluated from    |                               
+	 *      > isActive        |   geometry             | - Re-evaluated from vorticity
+	 *      > All body flag   |                        |                               
+    */
 	
 	// Computational time manager
 	double _time;
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick;
+        std::chrono::duration<double> span;
+    #endif
 
 	// this->initial_num = this->particleBase->num;
 	// this->adtParSize = this->particleBase->s;
-
-	// printf("\n+------------ Particle Redistribution ------------+\n");
 
 	// ============================================================= //
 	// ========== Particle Distribution Adaptation Update ========== //
@@ -59,10 +63,17 @@ void remeshing::get_remeshing(Particle &_par, GridNode &_gridNode, const int _st
     // Initial set for the adaptation flag
 	this->adap_flag = false;
 
-	if (Pars::flag_adaptive_dist && (_step%Pars::adapt_inv == 0) && (_step != 0)){
+	if (Pars::flag_adaptive_dist && (_step%Pars::adapt_inv == 0)/* && (_step != 0)*/){
 		// Evaluating and Performing particle adaptation
 		printf("\nPerform Particle Adaptation ...\n");
-		_time = omp_get_wtime();
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			tick = std::chrono::system_clock::now();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			_time = omp_get_wtime();
+		#endif
+
 
 		// // OLD METHOD [Using cell list]
 		// // The current method will evaluate and peforming particle adaptation
@@ -71,19 +82,26 @@ void remeshing::get_remeshing(Particle &_par, GridNode &_gridNode, const int _st
 		// Perform the particle adaptation
 		this->adap_flag = this->adapt_step.get_adaptation(_par, this->particleBase, _gridNode);
 
-		
+		// Update the particle flag data
 		if (this->adap_flag == false){
 			MESSAGE_LOG << "Adaptation checked! No adaptation!\n";
 		}
 		else{
 			printf("Evaluate the near body part ...\n");
 			geometry geom_tool;
-			geom_tool.eval_near_body(*this->particleBase, _bodyList);       // Calculate the near body object (for penalization)
+			geom_tool.eval_near_body(*this->particleBase, _bodyList);    // Calculate the near body object (for penalization)
 			geom_tool.eval_body_flag(*this->particleBase, _bodyList);    // Calculate isSurface (for adaptation) and also chi (for penalization) and active flag
 		}
 		
 		// Particle adaptation summary time display
-		_time = omp_get_wtime() - _time;
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			span = std::chrono::system_clock::now() - tick;
+			_time = span.count();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			_time = omp_get_wtime() - _time;
+		#endif
 		printf("<-> Particle adaptation comp. time:    [%f s]\n", _time);
 	}
 	
@@ -95,7 +113,13 @@ void remeshing::get_remeshing(Particle &_par, GridNode &_gridNode, const int _st
 
 	// Evaluating and Performing particle redistribution
 	printf("\nPerform Particle Redistribution ...\n");
-	_time = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
 	// Perform the particle redistribution
 	if (Pars::flag_fast_remesh){
@@ -109,7 +133,14 @@ void remeshing::get_remeshing(Particle &_par, GridNode &_gridNode, const int _st
 	
 	// Particle redistribution summary time display
 	printf("<+> Number of particle after remesh     : %8d\n", _par.num);
-	_time = omp_get_wtime() - _time;
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<-> Particle redistribution calculation \n");
 	printf("    comp. time:                        [%f s]\n", _time);
 

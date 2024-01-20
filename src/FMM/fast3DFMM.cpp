@@ -45,7 +45,13 @@ void fmm3D::calcVelocityFast(const std::vector<std::vector<double>> &_parPos,
     */
     
     // Time manager
-    double timer = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // PROCEDURE 1:
     // ***********
@@ -54,8 +60,15 @@ void fmm3D::calcVelocityFast(const std::vector<std::vector<double>> &_parPos,
     FMMCell treeData;
     treeData.generateTree(_parPos, _activeFlag);
 
-    timer = omp_get_wtime() - timer;
-	printf("<+> Tree finished in : %f s\n", timer);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> Tree finished in : %f s\n", _time);
     
     MESSAGE_LOG << "The support radius factor : " << SUPPORT_RADIUS_FACTOR << "\n";
 
@@ -104,9 +117,6 @@ void fastFMM3Dutils::velocityCalc(const FMMCell &treeData,
             const std::vector<double> &_alphaY,
             const std::vector<double> &_alphaZ)
 {
-    // Time management
-    double timer;
-
     // Resize the multipole data before calculation
     this->m_Vx = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
     this->m_Vy = std::vector<std::vector<double>>(treeData.cellNum, std::vector<double>(this->expOrd, 0.0));
@@ -116,12 +126,25 @@ void fastFMM3Dutils::velocityCalc(const FMMCell &treeData,
     this->multipoleCalc(treeData, _parPos, _activeFlag, _alphaX, _alphaY, _alphaZ);
 
     // **Calculate velocity
-    timer = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     this->evaluateFMM(treeData, _parPos, _activeFlag, _targetFlag, _alphaX, _alphaY, _alphaZ);
 
-    timer = omp_get_wtime() - timer;
-    printf("<+> FMM Procedure 3 [FMM]  : %f s\n", timer);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<+> FMM Procedure 3 [FMM]  : %f s\n", _time);
 
     return;
 }
@@ -146,8 +169,13 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
             const std::vector<double> &alphaZ)
 {
     // Time counter
-    double timer;
-    timer = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     fmm3D FMM3D_tools;
     
@@ -191,15 +219,29 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
     }
 
     // Management of timer
-    timer = omp_get_wtime() - timer;
-    printf("<+> FMM Procedure 1 [ME]   : %f s\n", timer);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+
+    printf("<+> FMM Procedure 1 [ME]   : %f s\n", _time);
 
 
     // SECTION 2:
     // *********
     // Calculate the multipole to multipole at each cell from child cell
     // Iterates through level
-    timer = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     for (int level = treeData.maxLevel - 1; level > 0; level --){
         // Iterate from one level above maximum level
         // Alias to the begining and end of cellID at the current level
@@ -246,8 +288,15 @@ void fastFMM3Dutils::multipoleCalc(const FMMCell &treeData,
     }    
     
     // Management of timer
-    timer = omp_get_wtime() - timer;
-    printf("<+> FMM Procedure 2 [M2M]  : %f s\n", timer);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<+> FMM Procedure 2 [M2M]  : %f s\n", _time);
     
     return;
 }

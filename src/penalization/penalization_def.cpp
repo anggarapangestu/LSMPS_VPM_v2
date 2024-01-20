@@ -22,8 +22,9 @@ void penalization::calculate_chi(Particle &_p, const std::vector<Body> &bList) c
         std::vector<double> _pos(DIM);
         _pos[0] = _p.x[i];
         _pos[1] = _p.y[i];
-        if (DIM > 2)
+        #if (DIM == 3)
         _pos[2] = _p.z[i];
+        #endif
         
         // Aliasing the body and calculate the minimum distance (relative to body surface normal)
         const Body &b = bList[_p.bodyPart[i]];
@@ -88,10 +89,10 @@ double penalization::get_chi(const double _normalDist) const
     if (Pars::opt_kaipen == 1){
         // Recalculation chi.
         double kai_tilde = 1.0;
-                
+
         // Recalculation kai for SEMI_IMPLICIT brinkmann penalization (Combine the implicit and explicit)
         if (chi < 1.0e0){   // Preventing division by 0
-            kai_tilde = chi / (Pars::dt * lambda * (1.0e0 - chi));
+            kai_tilde = chi / (Pars::dt * Pars::lambda * (1.0e0 - chi));
         }
 
         // Minimum between 1.0 and kai_tilde
@@ -106,6 +107,9 @@ double penalization::get_chi(const double _normalDist) const
 */
 void penalization::lambda_def(){
     // Update the value of lambda; References [Rasmussen 2011]
+
+    // Internal variable
+    double lambda = Pars::lambda;
     
     // IMPLICIT Scheme
     if (Pars::opt_pen == 1){

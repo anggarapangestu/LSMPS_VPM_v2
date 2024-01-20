@@ -14,7 +14,13 @@
 void diffusion::main_diffusion(Particle &p)
 {    
     // Diffusion computational time manager
-    double _time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     
     // Diffusion prompt
     printf("\nCalculating diffusion ...\n");
@@ -33,7 +39,14 @@ void diffusion::main_diffusion(Particle &p)
     }
 
     // Display computational time
-    _time = omp_get_wtime() - _time;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
     printf("<-> Diffusion total computation time:  [%f s]\n", _time);
 }
 
@@ -47,7 +60,13 @@ void diffusion::main_diffusion(Particle &p)
  */
 void diffusion::diffusion_2d(Particle &p){
     // Diffusion calculation computational time manager
-    double __time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // Internal method
     LSMPSa lsmpsa;		          // To calculate laplacian
@@ -110,15 +129,28 @@ void diffusion::diffusion_2d(Particle &p){
     }
 
     // Display local computational time
-    __time = omp_get_wtime() - __time;
-    printf("<-> Collecting active particle:        [%f s]\n", __time);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<-> Collecting active particle:        [%f s]\n", _time);
 
 
 
     // PROCEDURE 2:
     // ************
     // Calculating the diffusion
-    __time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Calculate the second order differential of vorticity
     Particle &_p = _particle;       // Aliasing
@@ -146,8 +178,15 @@ void diffusion::diffusion_2d(Particle &p){
     // }
 
     // Display local computational time
-    __time = omp_get_wtime() - __time;
-    printf("<-> Calculating diffusion:             [%f s]\n", __time);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<-> Calculating diffusion:             [%f s]\n", _time);
 
     return;
 }
@@ -162,7 +201,13 @@ void diffusion::diffusion_2d(Particle &p){
  */
 void diffusion::diffusion_3d(Particle &p){
     // Diffusion calculation computational time manager
-    double __time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // Internal method
     LSMPSa lsmpsa;		          // To calculate laplacian
@@ -237,14 +282,27 @@ void diffusion::diffusion_3d(Particle &p){
     //         because it will be calculated in the next section (particle redistribution)
 
     // Display local computational time
-    __time = omp_get_wtime() - __time;
-    printf("<-> Collecting active particle:        [%f s]\n", __time);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<-> Collecting active particle:        [%f s]\n", _time);
 
 
     // PROCEDURE 2:
     // ************
     // Calculating the diffusion
-    __time = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Calculate the second order differential of vorticity
     Particle &_p = _particle;       // Aliasing
@@ -297,7 +355,14 @@ void diffusion::diffusion_3d(Particle &p){
     // }
 
     // Display local computational time
-    __time = omp_get_wtime() - __time;
-    printf("<-> Calculating diffusion:             [%f s]\n", __time);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<-> Calculating diffusion:             [%f s]\n", _time);
     return;
 }

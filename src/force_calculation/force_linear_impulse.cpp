@@ -168,7 +168,7 @@ void force_calculation::Force2(int iT, double A1, double A2, double A3, double A
     double test1, test2;
 
     if (iT == 0){
-        test1 = omp_get_wtime();
+        // test1 = omp_get_wtime();
 		
         this->_omegasumx.clear();
         this->_omegasumy.clear();
@@ -235,12 +235,12 @@ void force_calculation::Force2(int iT, double A1, double A2, double A3, double A
 
         //set the variables for calculation
         set_variables(this->a1a2.size(), this->a2a3.size(), this->particles_inside.size());
-        test2 = omp_get_wtime();
+        // test2 = omp_get_wtime();
         printf("(Noca) step 1.0: %f s\n", test2-test1);
     }   
     
     if (iT != 0){
-        test1 = omp_get_wtime();
+        // test1 = omp_get_wtime();
         //update velocity and particle strength
         #pragma omp parallel for
         for (size_t i = 0; i < this->point_lists.size();i++){
@@ -248,7 +248,7 @@ void force_calculation::Force2(int iT, double A1, double A2, double A3, double A
             this->_p.v[i] = p.v[point_lists[i]];
             this->_p.gz[i] = p.gz[point_lists[i]];
         }
-        test2 = omp_get_wtime();
+        // test2 = omp_get_wtime();
         printf("(Noca) step 1.0: %f s\n", test2-test1);
     }
    
@@ -261,14 +261,14 @@ void force_calculation::Force2(int iT, double A1, double A2, double A3, double A
 	double gammaX2=0.0;
 	double gammaY2=0.0;
 
-    test1 = omp_get_wtime();
+    // test1 = omp_get_wtime();
     #pragma omp parallel for reduction (+:gammaX2, gammaY2)
     for (size_t i = 0; i < this->particles_inside.size(); i++){
         int ii = i;
         gammaX2 = gammaX2 +  this->_p.u[ii] * std::pow(this->_p.s[ii],2); //dxdy using area define by multiresolution LSMPSVPM
         gammaY2 = gammaY2 +  this->_p.v[ii] * std::pow(this->_p.s[ii],2); 
     }
-    test2 = omp_get_wtime();
+    // test2 = omp_get_wtime();
     printf("(Noca) step 2: %f s\n", test2-test1);
     
     this->_omegasumx.push_back(gammaX2);
@@ -277,12 +277,12 @@ void force_calculation::Force2(int iT, double A1, double A2, double A3, double A
     //LSMPSA full domain
     LSMPSa lsmpsa_uu;
     LSMPSa lsmpsa_vv;
-    test1 = omp_get_wtime();
+    // test1 = omp_get_wtime();
     //lsmpsa_uu.set_LSMPS(p.x, p.y, p.s, p.u, p.neighbor);
     //lsmpsa_vv.set_LSMPS(p.x, p.y, p.s, p.v, p.neighbor);
     lsmpsa_uu.set_LSMPS(this->_p.x, this->_p.y, this->_p.s, this->_p.u, p.x, p.y, p.s, p.u, this->_p.neighbor);
     lsmpsa_vv.set_LSMPS(this->_p.x, this->_p.y, this->_p.s, this->_p.v, p.x, p.y, p.s, p.v, this->_p.neighbor);
-    test2 = omp_get_wtime();
+    // test2 = omp_get_wtime();
     printf("(Noca) step 3: %f s\n", test2-test1);
     
     std::vector<double> d2udx2 = lsmpsa_uu.get_d2d2x();

@@ -11,7 +11,14 @@
 void geometry::define_vel_variation(Body &b)
 {
 	printf("<+> Define body velocity at each iteration ... \n");
-	double _time = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+
 
 	// Reserve the body velocity translation container
 	b.uT.clear();
@@ -78,7 +85,14 @@ void geometry::define_vel_variation(Body &b)
 	for (int _it = 0; _it < Pars::max_iter; _it++) b.wT[_it] = Pars::wbody;
 
 	// Simulation time counter
-	_time = omp_get_wtime() - _time;
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<-> Set body velocity at each iteration\n");
 	printf("    computational time:                [%f s]\n", _time);
 

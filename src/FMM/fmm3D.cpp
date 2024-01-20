@@ -437,13 +437,17 @@ void fmm3D::setupFMM(const TreeCell &cellData,
     // this->mp.resize(cellNum, std::vector<double>(this->expOrd,0.0));
 
     // Time counter
-    double start, finish;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
         
     // PROCEDURE 1! : Calc. multipole source (ak) of each leaf cell using (Multipole Expansion)
     // ************
     // Iterate through each leaf cell
-    start = omp_get_wtime();
-    
     #pragma omp parallel for
     for (size_t i = 0; i < cellData.leafList.size(); i++){
         // Internal variable
@@ -477,14 +481,27 @@ void fmm3D::setupFMM(const TreeCell &cellData,
         }
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 1 [ME]   : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 1 [ME]   : %f s\n", _time);
 
         
     // PROCEDURE 2! : Calc. multipole source (ak) of all cell using M2M Translation (UP-PASS)
     // ************
     // Iterate through each cell from [level (k_max - 1)] to [level 1]
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Iterate from one level below the maximum level to level 1
     for (int level = this->maxLevel - 1; level > 0; level--){
@@ -538,8 +555,15 @@ void fmm3D::setupFMM(const TreeCell &cellData,
         }
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 2 [M2M]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 2 [M2M]  : %f s\n", _time);
 
     // In this 3D FMM there is no downward pass (VERY HARD TO EVALUATE)
 
@@ -606,12 +630,17 @@ void fmm3D::setupVelocityFMM(const TreeCell &cellData,
     // }
 
     // Time counter
-    double start, finish;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
         
     // PROCEDURE 1! : Calc. multipole source (ak) of each leaf cell using (Multipole Expansion)
     // ************
     // Iterate through each leaf cell
-    start = omp_get_wtime();
     
     #pragma omp parallel for
     for (size_t i = 0; i < cellData.leafList.size(); i++){
@@ -655,14 +684,27 @@ void fmm3D::setupVelocityFMM(const TreeCell &cellData,
         }
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 1 [ME]   : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 1 [ME]   : %f s\n", _time);
 
         
     // PROCEDURE 2! : Calc. multipole source (ak) of all cell using M2M Translation (UP-PASS)
     // ************
     // Iterate through each cell from [level (k_max - 1)] to [level 1]
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Iterate from one level below the maximum level to level 1
     for (int level = this->maxLevel - 1; level > 0; level--){
@@ -726,8 +768,15 @@ void fmm3D::setupVelocityFMM(const TreeCell &cellData,
         }
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 2 [M2M]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 2 [M2M]  : %f s\n", _time);
 
     // In this 3D FMM there is no downward pass (VERY HARD TO EVALUATE)
 
@@ -777,15 +826,27 @@ void fmm3D::calcPotential(const TreeCell &cellData,
     this->parPotential.clear(); this->parPotential.resize(this->parNum, 0.0);
 
     // Time counter
-    double start, finish;
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     // double _timer, total1 = 0.0, total2 = 0.0, total3 = 0.0;
 
     // // PROCEDURE 5! : Still not constructed yet
     // // ************
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", _time);
 
     // printf("<+> FMM Procedure 5.1 : %f s [Direct SUM]\n", total1);
     // printf("<+> FMM Procedure 5.2 : %f s [Semi Farfield Calc.]\n", total2);
@@ -819,9 +880,13 @@ void fmm3D::calcField(const TreeCell &cellData,
     this->setupFMM(cellData, parPos, activeMark, srcVal);
 
     // Time counter
-    double start, finish;
-    start = omp_get_wtime();
-
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     // double _timer, total1 = 0.0, total2 = 0.0, total3 = 0.0;
 
     // Resize the variable size (note the index of expansion order from 0 -> max order)
@@ -967,8 +1032,15 @@ void fmm3D::calcField(const TreeCell &cellData,
 
     }
     
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", _time);
 
     // printf("<+> FMM Procedure 5.1 : %f s [Direct SUM]\n", total1);
     // printf("<+> FMM Procedure 5.2 : %f s [Farfield Cell Eval.]\n", total2);
@@ -1007,9 +1079,13 @@ void fmm3D::calcVelocity(const TreeCell &cellData,
     this->setupVelocityFMM(cellData, parPos, activeMark, alphaX, alphaY, alphaZ);
 
     // Time counter
-    double start, finish;
-    start = omp_get_wtime();
-
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     // double _timer, total1 = 0.0, total2 = 0.0, total3 = 0.0;
     // double _timerInt, total3_1 = 0.0, total3_2 = 0.0;
 
@@ -1293,8 +1369,15 @@ void fmm3D::calcVelocity(const TreeCell &cellData,
         }
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 3 [FMM]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 3 [FMM]  : %f s\n", _time);
 
     // printf("<+> FMM Procedure 3.1 : %f s [Direct SUM]\n", total1);
     // printf("<+> FMM Procedure 3.2 : %f s [Farfield Cell Eval.]\n", total2);
@@ -1339,9 +1422,13 @@ void fmm3D::calcVelocityNearBody(const TreeCell &cellData,
     this->setupVelocityFMM(cellData, parPos, activeMark, alphaX, alphaY, alphaZ);
 
     // Time counter
-    double start, finish;
-    start = omp_get_wtime();
-
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     // double _timer, total1 = 0.0, total2 = 0.0, total3 = 0.0;
     // double _timerInt, total3_1 = 0.0, total3_2 = 0.0;
 
@@ -1485,8 +1572,15 @@ void fmm3D::calcVelocityNearBody(const TreeCell &cellData,
         // End for this target particle
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 3 [FMM]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 3 [FMM]  : %f s\n", _time);
 
     // printf("<+> FMM Procedure 3.1 : %f s [Direct SUM]\n", total1);
     // printf("<+> FMM Procedure 3.2 : %f s [Farfield Cell Eval.]\n", total2);

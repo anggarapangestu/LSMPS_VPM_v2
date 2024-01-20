@@ -20,8 +20,13 @@ void save_data::save_body_state(const Body &b, std::string name, int type){
 	else if (type == 2) saveNode = false;	// Only save the Panel
 
 	// Time counting
-	double _start, _finish;
-	_start = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
 	// Internal object variable
 	std::string name1;
@@ -96,8 +101,15 @@ void save_data::save_body_state(const Body &b, std::string name, int type){
 	}
 	
 	// Display body write time to console
-	_finish = omp_get_wtime();
-	printf("<-> Body data write time:              [%f s]\n", _finish - _start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<-> Body data write time:              [%f s]\n", _time);
 	
 	return;
 }
@@ -115,8 +127,13 @@ void save_data::save_body_state(const Body &b, std::string name, int type){
 void save_data::save_par_state(const Particle &p, std::string name, int type)
 {	
 	// Time counting
-	double _start, _finish;
-	_start = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 	
 	// CODE LIES HERE
 	if (DIM == 2){
@@ -127,8 +144,15 @@ void save_data::save_par_state(const Particle &p, std::string name, int type)
 	}
 	
 	// Display particle write time to console
-	_finish = omp_get_wtime();
-	printf("<-> Particle data write time:          [%f s]\n", _finish - _start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<-> Particle data write time:          [%f s]\n", _time);
 
 	return;
 }
@@ -402,8 +426,14 @@ void save_data::save_grid_node_state(const GridNode &_gridNode, std::string _nam
 	std::cout << FONT_GREEN << "\nSaving the grid node state " << _name << " ..." << FONT_RESET << "\n";
 	
 	// Time counting
-	double _start, _finish;
-	_start = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+
 
 	// Save the grid node data
 	if (_type == 0)			// Save all data
@@ -413,8 +443,15 @@ void save_data::save_grid_node_state(const GridNode &_gridNode, std::string _nam
 	_gridNode.saveLeafGrid(_gridNode, _name);
 
 	// Display grid write time to console
-	_finish = omp_get_wtime();
-	printf("<-> Grid data write time:              [%f s]\n", _finish - _start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<-> Grid data write time:              [%f s]\n", _time);
 
 	return;
 }

@@ -1,5 +1,9 @@
 #include "force_calc.hpp"
 
+// =====================================================
+// +----------------- Utility Function ----------------+
+// =====================================================
+
 double force_calculation::FD_diff1(const double h, const std::vector<double> &f, int order){
 	double diff;
 	if (order == 1){
@@ -12,52 +16,132 @@ double force_calculation::FD_diff1(const double h, const std::vector<double> &f,
 	return diff;
 }
 
-// *******************************************************************
-// *********************** Force Calc Manager ************************
-// *******************************************************************
-// The force calculation manager
-void force_calculation::force_calc(const Particle& par, const Body& body, int step, int _type){
-    std::cout << "\nSaving force data ...\n";
-    clock_t t = clock();
+
+// =====================================================
+// +------------ Force Calculation Manager ------------+
+// =====================================================
+
+/**
+ *  @brief  The force calculation manager.
+ *         
+ *  @param  _particle  Particle data container.
+ *  @param  _bodyList  The list of body data container used for force calculation.
+ *  @param  _step  Current iteration simulation.
+ *  @param  _type  Type of force calculation.
+*/
+void force_calculation::force_calc(const Particle& par, 
+								   const std::vector<Body> &_bodyList, 
+								   int _step, int _type, std::string name)
+{
+	// The list of force calculation type
+	Pars::opt_force_type;
+
+	// Exception 1
+	if (_type == 0) return;
+	// Exception 2
+	if (N_BODY == 0) return;
+
+	// Log prompt
+	std::cout << "\nSaving force data ...\n";
+
+	// Computation timer
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+
+
     // Assign the step time
-    this->iter = step;
-    
+    this->iter = _step;
     // Change the initial condition
-    if (step == 0){
-        this->init = true;
-    }
-    if (Pars::opt_start_state == 1){
-        if(step == Pars::resume_step){
-            this->init = true;
-        }
-    }
+    if ((Pars::opt_start_state == 0 && (_step == 0)) ||
+		(Pars::opt_start_state == 1 && (_step == Pars::resume_step)))
+	{
+		this->init = true;
+	}
 
-    // ================ Barrier Mark =================
-    // [!] TODO: Saving Data Force 
-    if (_type == 1/*Pars::opt_force_type == 1*/){
-        std::cout << "<+> Direct Calculation Force\n";
-        this->direct_force(par, body);
-    }
-    else if (_type == 2/*Pars::opt_force_type == 2*/){
-        std::cout << "<+> Penalization Based Force\n";
-        double xpus[2] = {0, 0};
-        this->pen_force(par, body);
-    }
-    else if (Pars::opt_force_type == 3){
-        std::cout << "<+> Impulse Based Force\n";
-        this->Force2(step,1,2,3,4,1,2,par);
-    }
-
+    // Saving the force data according to the user choice type
+	switch (_type){
+	case 1:
+		printf("%s<+> Direct Calculation Force%s\n", FONT_CYAN, FONT_RESET);
+        this->direct_force(par, _bodyList[0]);	// Still not working
+		break;
+	case 2:
+		printf("%s<+> Penalization Based Force%s\n", FONT_CYAN, FONT_RESET);
+        this->pen_force(par, _bodyList, name);
+		break;
+	case 3:
+		printf("%s<+> Linear Impulse Based Force%s\n", FONT_CYAN, FONT_RESET);
+        // this->Force2(_step,1,2,3,4,1,2,par);
+		break;
+	case 4:
+		printf("%s<+> NOCA Impulse Based Force%s\n", FONT_CYAN, FONT_RESET);
+        this->Force2(_step,1,2,3,4,1,2,par);	// Still not working
+		break;
+	default:
+		break;
+	}
+    
     // Force calculation summary time display
-    t = clock() - t;
-    printf("<-> Force calculation computation time [%f s]\n", (double)t/CLOCKS_PER_SEC);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+    printf("<-> Force calculation computation time [%f s]\n", _time);
 
     return;
 }
 
-// *******************************************************************
-// ************************ Force Calculation ************************
-// *******************************************************************
+// // The force calculation manager
+// void force_calculation::force_calc(const Particle& par, const Body& body, int step, int _type){
+//     std::cout << "\nSaving force data ...\n";
+//     clock_t t = clock();
+//     // Assign the step time
+//     this->iter = step;
+    
+//     // Change the initial condition
+//     if (step == 0){
+//         this->init = true;
+//     }
+//     if (Pars::opt_start_state == 1){
+//         if(step == Pars::resume_step){
+//             this->init = true;
+//         }
+//     }
+
+//     // ================ Barrier Mark =================
+//     // [!] TODO: Saving Data Force 
+//     if (_type == 1/*Pars::opt_force_type == 1*/){
+//         std::cout << "<+> Direct Calculation Force\n";
+//         this->direct_force(par, body);
+//     }
+//     else if (_type == 2/*Pars::opt_force_type == 2*/){
+//         std::cout << "<+> Penalization Based Force\n";
+//         this->pen_force(par, body);
+//     }
+//     else if (Pars::opt_force_type == 3){
+//         std::cout << "<+> Impulse Based Force\n";
+//         this->Force2(step,1,2,3,4,1,2,par);
+//     }
+
+//     // Force calculation summary time display
+//     t = clock() - t;
+//     printf("<-> Force calculation computation time [%f s]\n", (double)t/CLOCKS_PER_SEC);
+
+//     return;
+// }
+
+
+// =====================================================
+// +------------ Force Calculation Manager ------------+
+// =====================================================
 // Direct force calculation
 void force_calculation::direct_force(const Particle& par, const Body& body){
     // Start the simulation
@@ -78,7 +162,7 @@ void force_calculation::direct_force(const Particle& par, const Body& body){
         // if((par.x[i] > body.min_pos[0] - 20*Pars::sigma) && (par.x[i] < body.max_pos[0] + 20*Pars::sigma) &&
         //    (par.y[i] > body.min_pos[1] - 20*Pars::sigma) && (par.y[i] < body.max_pos[1] + 20*Pars::sigma))
 		// if(par.isNearBody[i] == true)
-		if(par.bodyPart[i] != -1)
+		if(par.bodyPart[i] == 1)
 		{
             particle.x.push_back(par.x[i]);
             particle.y.push_back(par.y[i]);
@@ -227,7 +311,7 @@ void force_calculation::direct_force(const Particle& par, const Body& body){
 	
 	// Integration
     double _Fx, _Fy;
-	for (size_t i = 0; i < _panel.num; i++){
+	for (int i = 0; i < _panel.num; i++){
 		// ======== [1] ========
         // Contribution of pressure
 		_Fx = - _panel.P[i] * body.x_n[i] * body.size[i];
@@ -279,129 +363,288 @@ void force_calculation::direct_force(const Particle& par, const Body& body){
 }
 
 // Penalization force calculation
-void force_calculation::pen_force(const Particle& par, const Body& body){
-	// [PROCEDURE 0] : Define the particle data near solid body
+void force_calculation::pen_force(const Particle& p, const std::vector<Body> &_bodyList, std::string headName){
+	// [PROCEDURE 0] : Data container initialization
     // *************
-    Particle p;
-    p.num = 0;
-    for (int i = 0; i < par.num; i++){
-        // if(par.isNearBody[i] == true)
-		// if((par.x[i] > body.min_pos[0] - 20*Pars::sigma) && (par.x[i] < body.max_pos[0] + 20*Pars::sigma) &&
-        //    (par.y[i] > body.min_pos[1] - 20*Pars::sigma) && (par.y[i] < body.max_pos[1] + 20*Pars::sigma))
-		if(par.bodyPart[i] != -1)
-		{
-            p.x.push_back(par.x[i]);
-            p.y.push_back(par.y[i]);
-            p.s.push_back(par.s[i]);
-            p.chi.push_back(par.chi[i]);
-            p.u.push_back(par.u[i]);
-            p.v.push_back(par.v[i]);
-            p.num++;
-        }
-    }
+    // Internal variables (Store the data for each body)
+	std::vector<double> Fx(N_BODY, 0.0);		// The force in X direction
+	std::vector<double> Fy(N_BODY, 0.0);		// The force in Y direction
+	std::vector<double> Fz(N_BODY, 0.0);		// The force in Z direction
 
-    // [PROCEDURE 1] : Calculate the force data
+	std::vector<double> Mx(N_BODY, 0.0);		// The moment in X direction (effected by fy & fz)
+	std::vector<double> My(N_BODY, 0.0);		// The moment in Y direction (effected by fx & fz)
+	std::vector<double> Mz(N_BODY, 0.0);		// The moment in Z direction (effected by fy & fx)
+	
+    // Temporary force calculation
+	double fx, fy, fz;
+
+	// Body velocity <!> Need modification later on <!> 
+	double uS = Pars::ubody;
+	double vS = Pars::vbody;
+	double wS = Pars::wbody;
+
+	// [PROCEDURE 1] : Calculate the force data
     // *************
-    // Internal variables
-    double fx, fy, F_x, F_y, Cx, Cy, Cm, Mom;
-    double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf * Pars::Df;
-	fx = 0.0e0;
-	fy = 0.0e0;
-	F_x = 0.0e0;
-	F_y = 0.0e0;
-	Mom = 0.0e0;
-
-	std::vector<double> uSi = p.u; 	// Need modification later on
-	std::vector<double> vSi = p.v; 	// Need modification later on
-
-	for (int i = 0; i < p.num; i++){ 	// Must be deleted after modification later
-		uSi[i] = 0.0;
-		vSi[i] = 0.0;
-	}
-
 	// Calculation of the data force
-	// Non Iterative Penalization
-    if(Pars::opt_pen_iter == 1)
-	{
-		for (int i = 0; i < p.num; i++)
-		{
-			// Force calculation
-            if (Pars::opt_pen == 1 || Pars::opt_pen == 2){  // Implicit
-				fx = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.u[i] + uSi[i]) * std::pow(p.s[i], 2);
-				fy = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.v[i] + vSi[i]) * std::pow(p.s[i], 2);
-				F_x += fx; 
-				F_y += fy; 
-			}else if (Pars::opt_pen == 3){                  // Explicit
-				fx = -Pars::RHO * p.chi[i] * ((-p.u[i] + uSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
-				fy = -Pars::RHO * p.chi[i] * ((-p.v[i] + vSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
-				F_x += fx; 
-				F_y += fy; 
-			}
-
-			// Moment calculation
-			if(fy > 1.0e-12){
-				Mom += (fy * (Pars::xcenter - p.x[i])) ;
-			}
-			if(fx > 1.0e-12){
-				Mom += (fx * -(Pars::ycenter - p.y[i]));
-			}
-		}
-
-		// //Untuk EOM vibration
-		// Pars::gaya = F_y;
-		// Pars::momen = Mom;
-
-		// Coefficient of Forces
-		Cx = F_x / Cq;
-		Cy = F_y / Cq;
-		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
-	}
-    // Iterative Penalization [Not Finished]
-	if (Pars::opt_pen_iter == 2){
-		for (int i = 0; i < p.num; i++)
-		{
-			// Fluid to solid "+", alpha == 2
-			//fx = -Pars::RHO * 2 * p.chi[i] * ((-p.u[i] + uSi[i])/Pars::dt) * std::pow(p.s[i], 2) ;
-			//fy = -Pars::RHO * 2 * p.chi[i] * ((-p.v[i] + vSi[i])/Pars::dt)  * std::pow(p.s[i], 2) ;
-			fx = -Pars::RHO * p.u[i] * std::pow(p.s[i], 2) ;
-			fy = -Pars::RHO * p.v[i] * std::pow(p.s[i], 2) ;
-			F_x += fx; // ! should be changed for multiresolution
-			F_y += fy; // ! should be changed for multiresolution
+	#if (DIM == 2)
+		// The dynamic pressure
+		double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf * Pars::Df;
 		
-			// Hitung Moment.
-			if(fy > 1.0e-12){
-				Mom += (fy * (Pars::xcenter - p.x[i]));
-			}
-			if(fx > 1.0e-12){
-				Mom +=  (fx * -(Pars::ycenter - p.y[i]));
-			}
+		// =========== Data calculation ===========
+		for (int i = 0; i < p.num; i++){
+			// Body part
+			const int &part = p.bodyPart[i];
+
+			// Exclude the calculation from the particle far from body
+			if (part == -1) continue;
+
+			// Force calculation
+			// Intermediate variable
+			const double _K = - Pars::RHO * Pars::lambda * p.chi[i];	// The head constant in penalization force calculation
+			const double _A = p.s[i] * p.s[i];							// The area occupied by current particle
+			
+			// Calculate the force caused by current particle [Penalization method]
+			fx = _K * (uS - p.u[i]) * _A;
+			fy = _K * (vS - p.v[i]) * _A;
+
+			// Assign to the force container
+			Fx[part] += fx;
+			Fy[part] += fy;
+
+			// Moment calculation (M = r x F)
+			Mz[part] += (fy * (p.x[i] - _bodyList[part].cen_pos[0])) - 
+						(fx * (p.y[i] - _bodyList[part].cen_pos[1]));
 		}
+		
+		// =========== Data Saving ===========
+		std::ofstream ofs;
+		for (int part = 0; part < N_BODY; part++){
+			// Filename format
+			std::string name = "output/" + headName + "_force_pen_body_" + std::to_string(part+1) + ".csv";
+			
+			// Data header
+			if (this->init == true){
+				ofs.open(name.c_str());
+				ofs << "time" 
+					<< "," << "Fx" << "," << "Fy" << "," << "M"  
+					<< "," << "Cx" << "," << "Cy" << "," << "Cm" 
+					<< "\n";
+				ofs.close();
+				this->init = false;
+			}
 
-		// Coefficient of Forces
-		Cx = F_x / Cq;
-		Cy = F_y / Cq;
-		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
-	}
+			// Data input
+			ofs.open(name.c_str(), std::ofstream::out | std::ofstream::app);
+			ofs << this->iter * Pars::dt 
+				<< "," << Fx[part] 
+				<< "," << Fy[part] 
+				<< "," << Mz[part] 
+				<< "," << Fx[part] / Cq				// Aerodynamic force coefficient in x
+				<< "," << Fy[part] / Cq				// Aerodynamic force coefficient in y
+				<< "," << Mz[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in z
+				<< "\n";
+			ofs.close();
+		}
+	#elif (DIM == 3)
+		// The dynamic pressure
+		double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf;
+		
+		// =========== Data calculation ===========
+		for (int i = 0; i < p.num; i++){
+			// Body part
+			const int &part = p.bodyPart[i];
 
-	// =========== DATA SAVING ===========
-	std::ofstream ofs;
-    // Data header
-	if (this->init == true){
-		ofs.open("output/force_data_penalization.csv");
-		ofs << "time_pen" << "," 
-            << "Fx" << "," << "Fy" << "," << "M"  << "," 
-            << "Cx" << "," << "Cy" << "," << "Cm" <<"\n";
-		ofs.close();
-        this->init = false;
-	}
+			// Exclude the calculation from the particle far from body
+			if (part == -1) continue;
 
-	// Data input
-    ofs.open("output/force_data_penalization.csv", std::ofstream::out | std::ofstream::app);
-	ofs << this->iter * Pars::dt << "," 
-        << F_x << "," << F_y << "," << Mom << "," 
-        << Cx  << "," << Cy  << "," << Cm  << "\n";
-	ofs.close();
+			// Force calculation
+			// Intermediate variable
+			const double _K = - Pars::RHO * Pars::lambda * p.chi[i];	// The head constant in penalization force calculation
+			const double _V = p.s[i] * p.s[i] * p.s[i];					// The volume occupied by current particle
+
+			// Calculate the force caused by current particle [Penalization method]
+			fx = _K * (uS - p.u[i]) * _V;
+			fy = _K * (vS - p.v[i]) * _V;
+			fz = _K * (wS - p.w[i]) * _V;
+
+			// Assign to the force container
+			Fx[part] += fx;
+			Fy[part] += fy;
+			Fz[part] += fz;
+
+			// Moment calculation (M = r x F)
+			Mx[part] += (fz * (p.y[i]-_bodyList[part].cen_pos[1])) - 
+						(fy * (p.z[i]-_bodyList[part].cen_pos[2]));
+			My[part] += (fx * (p.z[i]-_bodyList[part].cen_pos[2])) - 
+						(fz * (p.x[i]-_bodyList[part].cen_pos[0]));
+			Mz[part] += (fy * (p.x[i]-_bodyList[part].cen_pos[0])) - 
+						(fx * (p.y[i]-_bodyList[part].cen_pos[1]));
+		}
+		
+		// =========== Data Saving ===========
+		std::ofstream ofs;
+		for (int part = 0; part < N_BODY; part++){
+			// Filename format
+			std::string name = "output/" + headName + "_force_pen_body_" + std::to_string(part+1) + ".csv";
+			// std::string name = "output/force_pen_body_" + std::to_string(part+1) + ".csv";
+			
+			// Data header
+			if (this->init == true){
+				ofs.open(name.c_str());
+				ofs << "time" 
+					<< "," << "Cx"
+					<< "," << "Cy"
+					<< "," << "Cz"
+					<< "," << "Cmx"
+					<< "," << "Cmy"
+					<< "," << "Cmz"
+					<< "\n";
+				ofs.close();
+				this->init = false;
+			}
+
+			// Data input
+			ofs.open(name.c_str(), std::ofstream::out | std::ofstream::app);
+			ofs << this->iter * Pars::dt 
+				<< "," << Fx[part] / Cq				// Aerodynamic force coefficient in x
+				<< "," << Fy[part] / Cq				// Aerodynamic force coefficient in y
+				<< "," << Fz[part] / Cq				// Aerodynamic force coefficient in z
+				<< "," << Mx[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in x
+				<< "," << My[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in y
+				<< "," << Mz[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in z
+				<< "\n";
+			ofs.close();
+		}
+	#endif
+	
+	return;
 }
+
+// // Penalization force calculation [OLD METHOD]
+// void force_calculation::pen_force(const Particle& par, const Body& body){
+// 	// [PROCEDURE 0] : Define the particle data near solid body
+//     // *************
+//     Particle p;
+//     p.num = 0;
+//     for (int i = 0; i < par.num; i++){
+//         // if(par.isNearBody[i] == true)
+// 		// if((par.x[i] > body.min_pos[0] - 20*Pars::sigma) && (par.x[i] < body.max_pos[0] + 20*Pars::sigma) &&
+//         //    (par.y[i] > body.min_pos[1] - 20*Pars::sigma) && (par.y[i] < body.max_pos[1] + 20*Pars::sigma))
+// 		if(par.bodyPart[i] != -1)
+// 		{
+//             p.x.push_back(par.x[i]);
+//             p.y.push_back(par.y[i]);
+//             p.s.push_back(par.s[i]);
+//             p.chi.push_back(par.chi[i]);
+//             p.u.push_back(par.u[i]);
+//             p.v.push_back(par.v[i]);
+//             p.num++;
+//         }
+//     }
+
+//     // [PROCEDURE 1] : Calculate the force data
+//     // *************
+//     // Internal variables
+//     double fx, fy, F_x, F_y, Mom, Cx, Cy, Cm;	// Temporary force calculation
+	
+//     double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf * Pars::Df;
+// 	fx = 0.0e0;
+// 	fy = 0.0e0;
+// 	F_x = 0.0e0;
+// 	F_y = 0.0e0;
+// 	Mom = 0.0e0;
+
+// 	std::vector<double> uSi = p.u; 	// Need modification later on
+// 	std::vector<double> vSi = p.v; 	// Need modification later on
+
+// 	for (int i = 0; i < p.num; i++){ 	// Must be deleted after modification later
+// 		uSi[i] = 0.0;
+// 		vSi[i] = 0.0;
+// 	}
+
+// 	// Calculation of the data force
+// 	// Non Iterative Penalization
+//     if(Pars::opt_pen_iter == 1)
+// 	{
+// 		for (int i = 0; i < p.num; i++)
+// 		{
+// 			// Force calculation
+//             // if (Pars::opt_pen == 1 || Pars::opt_pen == 2){  // Implicit
+// 				fx = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.u[i] + uSi[i]) * std::pow(p.s[i], 2);
+// 				fy = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.v[i] + vSi[i]) * std::pow(p.s[i], 2);
+// 				F_x += fx;
+// 				F_y += fy;
+// 			// }else if (Pars::opt_pen == 3){                  // Explicit
+// 			// 	fx = -Pars::RHO * p.chi[i] * ((-p.u[i] + uSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
+// 			// 	fy = -Pars::RHO * p.chi[i] * ((-p.v[i] + vSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
+// 			// 	F_x += fx;
+// 			// 	F_y += fy;
+// 			// }
+
+// 			// Moment calculation
+// 			if(fy > 1.0e-12){
+// 				Mom += (fy * (Pars::xcenter - p.x[i])) ;
+// 			}
+// 			if(fx > 1.0e-12){
+// 				Mom += (fx * -(Pars::ycenter - p.y[i]));
+// 			}
+// 		}
+
+// 		// //Untuk EOM vibration
+// 		// Pars::gaya = F_y;
+// 		// Pars::momen = Mom;
+
+// 		// Coefficient of Forces
+// 		Cx = F_x / Cq;
+// 		Cy = F_y / Cq;
+// 		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
+// 	}
+//     // Iterative Penalization [Not Finished]
+// 	if (Pars::opt_pen_iter == 2){
+// 		for (int i = 0; i < p.num; i++)
+// 		{
+// 			// Fluid to solid "+", alpha == 2
+// 			//fx = -Pars::RHO * 2 * p.chi[i] * ((-p.u[i] + uSi[i])/Pars::dt) * std::pow(p.s[i], 2) ;
+// 			//fy = -Pars::RHO * 2 * p.chi[i] * ((-p.v[i] + vSi[i])/Pars::dt)  * std::pow(p.s[i], 2) ;
+// 			fx = -Pars::RHO * p.u[i] * std::pow(p.s[i], 2) ;
+// 			fy = -Pars::RHO * p.v[i] * std::pow(p.s[i], 2) ;
+// 			F_x += fx; // ! should be changed for multiresolution
+// 			F_y += fy; // ! should be changed for multiresolution
+		
+// 			// Hitung Moment.
+// 			if(fy > 1.0e-12){
+// 				Mom += (fy * (Pars::xcenter - p.x[i]));
+// 			}
+// 			if(fx > 1.0e-12){
+// 				Mom +=  (fx * -(Pars::ycenter - p.y[i]));
+// 			}
+// 		}
+
+// 		// Coefficient of Forces
+// 		Cx = F_x / Cq;
+// 		Cy = F_y / Cq;
+// 		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
+// 	}
+
+// 	// =========== DATA SAVING ===========
+// 	std::ofstream ofs;
+//     // Data header
+// 	if (this->init == true){
+// 		ofs.open("output/force_data_penalization.csv");
+// 		ofs << "time_pen" << "," 
+//             << "Fx" << "," << "Fy" << "," << "M"  << "," 
+//             << "Cx" << "," << "Cy" << "," << "Cm" <<"\n";
+// 		ofs.close();
+//         this->init = false;
+// 	}
+
+// 	// Data input
+//     ofs.open("output/force_data_penalization.csv", std::ofstream::out | std::ofstream::app);
+// 	ofs << this->iter * Pars::dt << "," 
+//         << F_x << "," << F_y << "," << Mom << "," 
+//         << Cx  << "," << Cy  << "," << Cm  << "\n";
+// 	ofs.close();
+// }
 
 // Impulse Force Calculation
 void force_calculation::imp_force(const Particle& par, const Body& body){

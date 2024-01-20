@@ -149,9 +149,9 @@ void penalization::no_slip(Particle &_p,
         const int &ori_ID = this->baseID[i];
 
         // Assign each new data to original data
-        _basePar.u[ori_ID]   = _p.u[i];
-        _basePar.v[ori_ID]   = _p.v[i];
-        _basePar.gz[ori_ID]  = _p.gz[i];
+        _basePar.u[ori_ID]  = _p.u[i];
+        _basePar.v[ori_ID]  = _p.v[i];
+        _basePar.gz[ori_ID] = _p.gz[i];
         _basePar.vorticity[ori_ID] = _p.vorticity[i];
     }
 	
@@ -229,16 +229,16 @@ void penalization::no_slip_3d(Particle &_p,
 		> Velocity penalization calculation 1 for: Implicit and semi implicit
 		> Velocity penalization calculation 2 for: Explicit
 	*/
-	// Velocity penalization calculation 1 (IMPLICIT + SEMI)
+	// Velocity penalization calculation 1 (IMPLICIT and SEMI)
 	if (Pars::opt_pen == 1 || Pars::opt_pen == 2)
 	{
 		#pragma omp parallel for
 		for (int i = 0; i < _p.num; i++)
 		{
 			// Consider velocity resultant
-			u_pen[i] = (_p.u[i] + Pars::lambda*Pars::dt* _p.chi[i] * uS[i]/* - Pars::u_inf*/) / (1.0e0 + (Pars::lambda * Pars::dt * _p.chi[i]));
-			v_pen[i] = (_p.v[i] + Pars::lambda*Pars::dt* _p.chi[i] * vS[i]/* - Pars::v_inf*/) / (1.0e0 + (Pars::lambda * Pars::dt * _p.chi[i]));
-			w_pen[i] = (_p.w[i] + Pars::lambda*Pars::dt* _p.chi[i] * wS[i]/* - Pars::w_inf*/) / (1.0e0 + (Pars::lambda * Pars::dt * _p.chi[i]));
+			u_pen[i] = (_p.u[i] + Pars::lambda*Pars::dt* _p.chi[i] * uS[i]) / (1.0e0 + (Pars::lambda * Pars::dt * _p.chi[i]));
+			v_pen[i] = (_p.v[i] + Pars::lambda*Pars::dt* _p.chi[i] * vS[i]) / (1.0e0 + (Pars::lambda * Pars::dt * _p.chi[i]));
+			w_pen[i] = (_p.w[i] + Pars::lambda*Pars::dt* _p.chi[i] * wS[i]) / (1.0e0 + (Pars::lambda * Pars::dt * _p.chi[i]));
 		}
 	}
 	// Velocity penalization calculation 2 (EXPLICIT)
@@ -248,9 +248,9 @@ void penalization::no_slip_3d(Particle &_p,
 		for (int i = 0; i < _p.num; i++)
 		{
 			// Consider velocity resultant
-			u_pen[i] = (1 - _p.chi[i]) * _p.u[i] + _p.chi[i] * (uS[i]/* - Pars::u_inf*/);
-			v_pen[i] = (1 - _p.chi[i]) * _p.v[i] + _p.chi[i] * (vS[i]/* - Pars::v_inf*/);
-			w_pen[i] = (1 - _p.chi[i]) * _p.w[i] + _p.chi[i] * (wS[i]/* - Pars::w_inf*/);
+			u_pen[i] = (1 - _p.chi[i]) * _p.u[i] + _p.chi[i] * (uS[i]);
+			v_pen[i] = (1 - _p.chi[i]) * _p.v[i] + _p.chi[i] * (vS[i]);
+			w_pen[i] = (1 - _p.chi[i]) * _p.w[i] + _p.chi[i] * (wS[i]);
 		}
 	}
 	
@@ -324,6 +324,17 @@ void penalization::no_slip_3d(Particle &_p,
 		_basePar.vorty[ori_ID]  = _p.vorty[i];
 		_basePar.vortz[ori_ID]  = _p.vortz[i];
     }
+
+	// Update the vorticity
+	_basePar.vorticity.resize(_basePar.num,0.0);
+	#pragma omp parallel for
+    for (int i = 0; i < _p.num; i++){
+		_basePar.vorticity[i] = std::sqrt(
+			_basePar.vortx[i]*_basePar.vortx[i] +
+			_basePar.vorty[i]*_basePar.vorty[i] +
+			_basePar.vortz[i]*_basePar.vortz[i]
+		);
+	}
 	
 	return;
 }
@@ -352,19 +363,19 @@ void penalization::no_slip_iterative(Particle &_p,
 	VelocityCalc velocity_tool;
 
 	// Calculate the single no slip boudanry condition penalization
-	for (int _it = 0; _it < Pars::pen_iter; _it++){
-		// <!> Procedure 1
-		// Calculate penalization
-		if (DIM == 2){
-			this->no_slip(_p, _basePar, _bodyList, step);
-		}
-        else if (DIM == 3){
-			this->no_slip_3d(_p, _basePar, _bodyList, step);
-		}
+	for (int _it = 0; _it < Pars::pen_iter - 1; _it++){
+		// // <!> Procedure 1 [Move to the bottom of the loop]
+		// // Calculate penalization
+		// if (DIM == 2){
+		// 	this->no_slip(_p, _basePar, _bodyList, step);
+		// }
+        // else if (DIM == 3){
+		// 	this->no_slip_3d(_p, _basePar, _bodyList, step);
+		// }
 
 		// <!> Procedure 1.2
 		// Update the vorticity inside the body to zero (cancel the vorticity residual by error LSMPS calculation)
-		if (DIM == 2){
+		#if (DIM == 2)
 			#pragma omp parallel for
 			for(int ID = 0; ID < _basePar.num; ID++){
 				if (_basePar.insideBody[ID] == true){
@@ -373,8 +384,7 @@ void penalization::no_slip_iterative(Particle &_p,
 					_basePar.gz[ID] = 0;
 				}
 			}
-		}
-		else if (DIM == 3){
+		#elif (DIM == 3)
 			#pragma omp parallel for
 			for(int ID = 0; ID < _basePar.num; ID++){
 				if (_basePar.insideBody[ID] == true){
@@ -384,7 +394,7 @@ void penalization::no_slip_iterative(Particle &_p,
 					_basePar.vortz[ID] = 0;
 				}
 			}
-		}
+		#endif
 
 
 		// <!> Procedure 2
@@ -394,7 +404,7 @@ void penalization::no_slip_iterative(Particle &_p,
 
 		// <!> Procedure 3
 		// Update the vorticity and velocity data into temporary particle (_p)
-		if (DIM == 2){
+		#if (DIM == 2)
 			#pragma omp parallel for
 			for (int i = 0; i < _p.num; i++){
 				// Aliasing the original ID
@@ -406,8 +416,7 @@ void penalization::no_slip_iterative(Particle &_p,
 				_p.gz[i] = _basePar.gz[ori_ID];
 				_p.vorticity[i] = _basePar.vorticity[ori_ID];
 			}
-		}
-		if (DIM == 3){
+		#elif (DIM == 3)
 			#pragma omp parallel for
 			for (int i = 0; i < _p.num; i++){
 				// Aliasing the original ID
@@ -421,6 +430,15 @@ void penalization::no_slip_iterative(Particle &_p,
 				_p.vorty[i] = _basePar.vorty[ori_ID];
 				_p.vortz[i] = _basePar.vortz[ori_ID];
 			}
+		#endif
+
+		// <!> Procedure 1
+		// Calculate penalization
+		if (DIM == 2){
+			this->no_slip(_p, _basePar, _bodyList, step);
+		}
+        else if (DIM == 3){
+			this->no_slip_3d(_p, _basePar, _bodyList, step);
 		}
 	}
 	

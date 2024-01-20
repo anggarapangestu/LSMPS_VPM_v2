@@ -222,12 +222,17 @@ void fmm2D::setupFMM(const TreeCell &cellData,
     // this->bk.resize(cellNum,std::vector<std::complex<double>>(expOrd + 1,std::complex<double>(0.0,0.0)));
 
     // Time counter
-    double start, finish;
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
         
     // PROCEDURE 1! : Calc. multipole source (ak) of each leaf cell using (Multipole Expansion)
     // ************
     // Iterate through each leaf cell
-    start = omp_get_wtime();
     
     #pragma omp parallel for
     for (size_t i = 0; i < cellData.leafList.size(); i++){
@@ -278,14 +283,27 @@ void fmm2D::setupFMM(const TreeCell &cellData,
         // > (Number of active particle) x (order of expansion) --> (N_act) x (Pmax+1)
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 1 [ME]   : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 1 [ME]   : %f s\n", _time);
 
         
     // PROCEDURE 2! : Calc. multipole source (ak) of all cell using M2M Translation (UP-PASS)
     // ************
     // Iterate through each cell from [level (k_max - 1)] to [level 1]
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     
     // Iterate from one level below the maximum level to level 1
     for (int level = this->maxLevel - 1; level > 0; level--){
@@ -364,15 +382,28 @@ void fmm2D::setupFMM(const TreeCell &cellData,
     // Order of calculation / complexity:
     // > (Number of left cell) x (4 child) x (order of expansion^2)/2 --> (N_celltot) x 2 x (Pmax+1)^2
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 2 [M2M]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 2 [M2M]  : %f s\n", _time);
 
 
     // PROCEDURE 3! : Calc. local source (bk) of all cell (contain the well separated neighbor cell only) using M2L Translation
     // ************
     // Calculate through all active cell (Containing particle) start from level 2
     // Find the first cell ID at level 2
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
     // double _timerML, stg1ML = 0.0, stg2ML = 0.0, stg3ML = 0.0, stg4ML = 0.0;
 
     // Collect all of the Cell ID for M2L calculation
@@ -528,8 +559,15 @@ void fmm2D::setupFMM(const TreeCell &cellData,
     // Order of calculation / complexity:
     // > (Number of left cell) x (27 ngh) x (order of expansion^2) --> (N_celltot) x 27 x (Pmax+1)^2
     
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 3 [M2L]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 3 [M2L]  : %f s\n", _time);
     // printf("<+> FMM Procedure 3 STG 1  : %f s\n", stg1ML);
     // printf("<+> FMM Procedure 3 STG 2  : %f s\n", stg2ML);
 
@@ -537,7 +575,13 @@ void fmm2D::setupFMM(const TreeCell &cellData,
     // PROCEDURE 4! : Calc. local source (bk) of all cell using L2L Translation (DOWN-PASS)
     // ************
     // Evaluate all cell that have child
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime();
+    #endif
 
     // Create an iteration from level [2] to one level below the maximum level
     for (int level = 2; level < this->maxLevel; level++){
@@ -606,8 +650,15 @@ void fmm2D::setupFMM(const TreeCell &cellData,
         }
     }
     
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 4 [L2L]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        span = std::chrono::system_clock::now() - tick;
+        _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 4 [L2L]  : %f s\n", _time);
     return;
 }
 
@@ -646,8 +697,13 @@ void fmm2D::calcPotential(const TreeCell &cellData,
     this->parPotential.resize(this->parNum, 0.0);
 
     // Time counter
-    double start, finish;
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
     // double _timer, total1 = 0.0, total2 = 0.0, total3 = 0.0;
 
     // PROCEDURE 5! : Calculate the potential at each target position
@@ -822,8 +878,15 @@ void fmm2D::calcPotential(const TreeCell &cellData,
         // > (Number of left cell) x (27 ngh) x (order of expansion^2) --> (N_celltot) x 27 x (Pmax+1)^2
     }
 
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", _time);
 
     // printf("<+> FMM Procedure 5.1 : %f s [Direct SUM]\n", total1);
     // printf("<+> FMM Procedure 5.2 : %f s [Semi Farfield Calc.]\n", total2);
@@ -857,8 +920,13 @@ void fmm2D::calcField(const TreeCell &cellData,
     this->setupFMM(cellData, parPos, activeMark, srcVal);
 
     // Time counter
-    double start, finish;
-    start = omp_get_wtime();
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
     // double _timer, total1 = 0.0, total2 = 0.0, total3 = 0.0;
 
@@ -1037,8 +1105,15 @@ void fmm2D::calcField(const TreeCell &cellData,
         // > (Number of left cell) x (27 ngh) x (order of expansion^2) --> (N_celltot) x 27 x (Pmax+1)^2
     }
     
-    finish = omp_get_wtime();
-	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", finish-start);
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> FMM Procedure 5 [FMM]  : %f s\n", _time);
 
     // printf("<+> FMM Procedure 5.1 : %f s [Direct SUM]\n", total1);
     // printf("<+> FMM Procedure 5.2 : %f s [Semi Farfield Calc.]\n", total2);

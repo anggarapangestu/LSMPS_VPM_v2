@@ -31,8 +31,13 @@ void VelocityCalc::get_velocity(Particle &p, const int step)
 	printf("<+> Calculate the rotational velocity term\n");
 
 	// Computational time manager
-	double _time;
-	_time = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 
 	// **Calculate the rotational part
 	if (DIM == 2){
@@ -91,7 +96,14 @@ void VelocityCalc::get_velocity(Particle &p, const int step)
 	}
 
 	// Display computational time
-	_time = omp_get_wtime() - _time;
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
 	printf("<-> Velocity calculation comp. time:   [%f s]\n", _time);
 
 	return;
@@ -205,7 +217,13 @@ void VelocityCalc::velocity_fmm_2d(Particle &p, const int step){
 	// PROCEDURE 2: Create tree cell data
     // ********************************************************************
 	// Initialize the tree
-	double start = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 	
 	// Initialization Tree Map
 	if (step == 0){
@@ -216,12 +234,57 @@ void VelocityCalc::velocity_fmm_2d(Particle &p, const int step){
 		this->treeData.updateTree(particle_POS, particle_mark);
 	}
 
-	// [DEBUGGING LINE]
+	// [!] Additional information
+	printf("    >> Leaf min level %2d\n", this->treeData.min_level);
+	printf("    >> Leaf max level %2d\n", this->treeData.max_level);
+
+	// // [DEBUGGING LINE]
     // this->treeData.saveLeafTree(treeData, std::to_string(step));
     // this->treeData.saveTree(treeData, std::to_string(step));
+	
+	// // A debug line to investigate the mozaic pattern problem source
+	// std::vector<int> _group1 = {809,207,50,11};
+	// std::vector<int> _group2 = {194,51,12};
+	// std::vector<int> _group3 = {13600,3386};
+	// std::vector<int> _list1,_list2,_list3,_list4;
+	// for (const int &ID : _group1){
+	// 	this->treeData.intList(ID,_list1,_list3);
+	// 	this->treeData.extList(ID,_list2,_list4);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L1_", _list1);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L2_", _list2);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L3_", _list3);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L4_", _list4);
+	// }
+	// ERROR_LOG << "DATA 1 has just wrote\n";
+	// for (const int &ID : _group2){
+	// 	this->treeData.intList(ID,_list1,_list3);
+	// 	this->treeData.extList(ID,_list2,_list4);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L1_", _list1);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L2_", _list2);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L3_", _list3);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L4_", _list4);
+	// }
+	// ERROR_LOG << "DATA 2 has just wrote\n";
+	// for (const int &ID : _group3){
+	// 	this->treeData.intList(ID,_list1,_list3);
+	// 	this->treeData.extList(ID,_list2,_list4);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L1_", _list1);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L2_", _list2);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L3_", _list3);
+	// 	this->treeData.saveSelTree(treeData, std::to_string(ID)+"_L4_", _list4);
+	// }
+	// ERROR_LOG << "DATA 3 has just wrote\n";
+	// throw std::exception();
 
-	double finish = omp_get_wtime();
-	printf("<+> Tree finished in : %f s\n", finish-start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> Tree finished in       : %f s\n", _time);
 	
 	
 	// PROCEDURE 3: Calculate the velocity (by FMM)
@@ -366,7 +429,13 @@ void VelocityCalc::velocity_fmm_3d(Particle &p, const int step){
 	// PROCEDURE 2: Create tree cell data
     // ********************************************************************
 	// Initialize the tree
-	double start = omp_get_wtime();
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
 	
 	// Initialization Tree Map
 	if (step == 0){
@@ -381,8 +450,15 @@ void VelocityCalc::velocity_fmm_3d(Particle &p, const int step){
     // this->treeData.saveLeafTree(treeData, std::to_string(step));
     // this->treeData.saveTree(treeData, std::to_string(step));
 
-	double finish = omp_get_wtime();
-	printf("<+> Tree finished in : %f s\n", finish-start);
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<+> Tree finished in       : %f s\n", _time);
 	
 	
 	// PROCEDURE 3: Calculate the velocity (by FMM)
@@ -470,9 +546,9 @@ void VelocityCalc::velocity_fmm_3d_fast(Particle &p, const int step){
 
    	// The marker to calculate near body particle only or all particle [Actually is not yet implemented]
 	bool calcAllParticle = ALL_PARTICLE;
-	if (step % Pars::step_inv == 0){
-		calcAllParticle = true;
-	}
+	// if (step % Pars::step_inv == 0){
+	// 	calcAllParticle = true;
+	// }
 
     // PROCEDURE 1: Data initialization
     // ********************************************************************
