@@ -114,6 +114,174 @@ void save_data::save_body_state(const Body &b, std::string name, int type){
 	return;
 }
 
+
+/**
+ *  A type of interpolation data write for 3D simulation
+ *    0:= Only save velocity
+ *    1:= Save velocity and vorticity data
+ *    2:= Addition of Q criterion data
+*/
+#define INTERPOLATE_3D_TYPE	0
+
+/**
+ *  @brief Write the particle properties data of interpolation result.
+ *  
+ *  @param	_particle	The particle object to be wrote.
+ *  @param	_name	Identifier name for saved file.
+ * 
+ *  @headerfile save_data.hpp
+ */
+void save_data::save_par_interpolation(const Particle &p, std::string name){
+	// Time counting
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+	
+	// Print message log!!!
+	std::cout << FONT_GREEN << "\nSave interpolation data state " << name << " ..." << FONT_RESET << "\n";
+	
+	// Set up the data writter
+	std::ofstream writeData;
+	name = "outputInterpolate/particle_interpolate_" + name + ".csv";
+	writeData.open(name.c_str());
+	
+	#if (DIM == 2)
+		// Save the table header
+		writeData <<  "" << "x"
+				  << "," << "y"
+				  << "," << "size"
+				  << "," << "u"
+				  << "," << "v"
+				  << "," << "vor"
+				  << "\n";
+		
+		// Save the table data
+		for (int i = 0; i < p.num; i++){
+		writeData <<  "" << p.x[i]
+				  << "," << p.y[i]
+				  << "," << p.s[i]
+				  << "," << p.u[i] - Pars::ubody 
+				  << "," << p.v[i] - Pars::vbody
+				  << "," << p.vorticity[i]
+				  << "\n";
+		}
+	#elif (DIM == 3)
+		// Save the velocity data only
+		if (INTERPOLATE_3D_TYPE == 0){
+			// Save the table header
+			writeData <<  "" << "x"
+					<< "," << "y"
+					<< "," << "z"
+					<< "," << "size"
+					<< "," << "u"
+					<< "," << "v"
+					<< "," << "w"
+					<< "\n";
+			
+			// Save the table data
+			for (int i = 0; i < p.num; i++){
+			writeData <<  "" << p.x[i]
+					<< "," << p.y[i]
+					<< "," << p.z[i]
+					<< "," << p.s[i]
+					<< "," << p.u[i] - Pars::ubody 
+					<< "," << p.v[i] - Pars::vbody
+					<< "," << p.w[i] - Pars::wbody
+					<< "\n";
+			}
+		}
+
+		// Save the velocity and vorticity data
+		else if (INTERPOLATE_3D_TYPE == 1){
+			// Save the table header
+			writeData <<  "" << "x"
+					<< "," << "y"
+					<< "," << "z"
+					<< "," << "size"
+					<< "," << "u"
+					<< "," << "v"
+					<< "," << "w"
+					<< "," << "vortx"
+					<< "," << "vorty"
+					<< "," << "vortz"
+					<< "," << "vor"
+					<< "\n";
+			
+			// Save the table data
+			for (int i = 0; i < p.num; i++){
+			writeData <<  "" << p.x[i]
+					<< "," << p.y[i]
+					<< "," << p.z[i]
+					<< "," << p.s[i]
+					<< "," << p.u[i] - Pars::ubody 
+					<< "," << p.v[i] - Pars::vbody
+					<< "," << p.w[i] - Pars::wbody
+					<< "," << p.vortx[i]
+					<< "," << p.vorty[i]
+					<< "," << p.vortz[i]
+					<< "," << p.vorticity[i]
+					<< "\n";
+			}
+		}
+
+		// Save the velocity, vorticity, and Q criterion data
+		else if (INTERPOLATE_3D_TYPE == 2){
+			// Save the table header
+			writeData <<  "" << "x"
+					<< "," << "y"
+					<< "," << "z"
+					<< "," << "size"
+					<< "," << "u"
+					<< "," << "v"
+					<< "," << "w"
+					<< "," << "vortx"
+					<< "," << "vorty"
+					<< "," << "vortz"
+					<< "," << "vor"
+					<< "," << "Q"
+					<< "\n";
+			
+			// Save the table data
+			for (int i = 0; i < p.num; i++){
+			writeData <<  "" << p.x[i]
+					<< "," << p.y[i]
+					<< "," << p.z[i]
+					<< "," << p.s[i]
+					<< "," << p.u[i] - Pars::ubody 
+					<< "," << p.v[i] - Pars::vbody
+					<< "," << p.w[i] - Pars::wbody
+					<< "," << p.vortx[i]
+					<< "," << p.vorty[i]
+					<< "," << p.vortz[i]
+					<< "," << p.vorticity[i]
+					<< "," << p.P[i]
+					<< "\n";
+			}
+		}
+	#endif
+
+	// Close the writter
+	writeData.close();
+	
+	// Display particle write time to console
+	#if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<-> Particle data write time:          [%f s]\n", _time);
+
+	return;
+}
+
+
 /**
  *  @brief Write the particle properties data.
  *  
@@ -136,11 +304,15 @@ void save_data::save_par_state(const Particle &p, std::string name, int type)
     #endif
 	
 	// CODE LIES HERE
-	if (DIM == 2){
-		this->save_par_state_2D(p, name, type);
-	}
-	else if (DIM == 3){
-		this->save_par_state_3D(p, name, type);
+	if (N_BODY != 0){
+		if (DIM == 2){
+			this->save_par_state_2D(p, name, type);
+		}
+		else if (DIM == 3){
+			this->save_par_state_3D(p, name, type);
+		}
+	}else{
+		this->save_par_state_init_vor(p, "solution", type);
 	}
 	
 	// Display particle write time to console
@@ -157,6 +329,43 @@ void save_data::save_par_state(const Particle &p, std::string name, int type)
 	return;
 }
 
+void save_data::save_par_state_init_vor(const Particle &p, std::string name, int type){
+	// internal object variables
+	std::ofstream writeData;
+
+	// Print message log!!!
+	std::cout << FONT_GREEN << "\nSaving the particle state " << name << " ..." << FONT_RESET << "\n";
+	name = "output/particle_state_" + name + ".csv";
+	writeData.open(name.c_str());
+
+	// Save the table header
+	writeData <<  "" << "xp"
+			  << "," << "yp"
+			  << "," << "sp"
+			  << "," << "vor"
+			  << "," << "un"
+ 			  << "," << "vn"
+			  << "," << "ua"
+ 			  << "," << "va"
+			  << "," << "isBoundary";
+	writeData << "\n";
+
+	// Save whole domain
+	for (int i = 0; i < p.num; i++){
+		// Save the table data
+		writeData <<  "" << p.x[i]
+				  << "," << p.y[i]
+				  << "," << p.s[i]
+				  << "," << p.vorticity[i]
+				  << "," << p.u[i]
+				  << "," << p.v[i]
+				  << "," << p.gx[i]
+				  << "," << p.gy[i]
+				  << "," << p.isBoundary[i];
+		writeData << "\n";
+	}
+	
+}
 
 void save_data::save_par_state_2D(const Particle &p, std::string name, int type){
 	// Create aliases to the writting flag

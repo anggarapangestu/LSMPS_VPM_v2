@@ -47,6 +47,7 @@
 	#include "src/force_calculation/force_calc.hpp"
 // #pragma endregion
 
+#if (DATA_INTERPOLATION == 0)
 // =====================================================
 // +--------------- Program Starts Here ---------------+
 // =====================================================
@@ -121,9 +122,20 @@ int main(int argc, char const *argv[])
 	// *******************************************************************
 	// Initial particle distribution generation
 	initialization_tool.initialize_particle(particle, bodyList, nodeGridList);
-	
+
+	// Additional Patch to update the domain boundary check
+	initialization_tool.update_domain_boundary(particle);
+
 	// Generate the particle neighbor ID data list
 	remesh_tool.set_neighbor(particle, nodeGridList);
+	
+	// Initial particle distribution generation
+	initialization_tool.initialize_vorticity(particle);
+	
+	// Adaptation of vorticity only for no obstacle simulation
+	#if (N_BODY == 0)
+		remesh_tool.get_remeshing(particle, nodeGridList, 0, bodyList);
+	#endif
 
 	// ** Here a Debug or Testing line Start
 		/* Put your code here ... */
@@ -249,48 +261,51 @@ int main(int argc, char const *argv[])
 				
 				// SOLVER SEQUENCE : 3 -> 4 -> 5 -> 1 -> 2
 
-				// =============== SOLVER STEP [3] ===============
-				// [3] Perform penalization using Brinkmann: Penalize the velocity in body domain
-				penalization_tool.get_penalization(particle, bodyList, step);
+				// // =============== SOLVER STEP [3] ===============
+				// // [3] Perform penalization using Brinkmann: Penalize the velocity in body domain
+				// #if (N_BODY > 0)
+				// 	penalization_tool.get_penalization(particle, bodyList, step);
+				// #endif
 
-				// ================ Barrier Mark - Data Saving =================
-				// [!] TODO 1: Saving Data Force 
-				force_tool.force_calc(particle, bodyList, step, 2, "aftPen");	// Penalization mode
+				// // ================ Barrier Mark - Data Saving =================
+				// // [!] TODO 1: Saving Data Force 
+				// force_tool.force_calc(particle, bodyList, step, 2, "aftPen");		// Penalization mode
+				// // force_tool.force_calc(particle, bodyList, step, 3, "aftPenMom");	// Vorticity moment mode
 				
-				// [!] TODO 2: Saving Particle Data
-				if ((step % Pars::save_inv == 0)){
-					// Saving particle data
-					std::string DataName = utility.saveName(step);		// Write data file name
-					// DataName = "aftPen_" + DataName;
-					save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
-				}
-				
-				// =============== SOLVER STEP [4] ===============
-				// [4] Convection or Advection Sub-step: Perform the particle advection
-				advection_tool.main_advection(particle);      			// [!] later: do 2nd order scheme
-				
-				// =============== SOLVER STEP [5.1] ===============
-				// [5.1] Diffusion Sub-step: Calculate the vorticity diffusion & time integration
-				if (DIM == 2) diffusion_tool.main_diffusion(particle); 	// [!] later: do 2nd order scheme
-
-				// =============== SOLVER STEP [5.2] ===============
-				// [5.2] Stretching Sub-step: Calculate the vorticity stretching & time integration
-				if (DIM == 3) stretching_tool.calc_diff_stretch(particle);
-
 				// // [!] TODO 2: Saving Particle Data
 				// if ((step % Pars::save_inv == 0)){
 				// 	// Saving particle data
 				// 	std::string DataName = utility.saveName(step);		// Write data file name
-				// 	DataName = "aftStr_" + DataName;
+				// 	// DataName = "aftPen_" + DataName;
 				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
 				// }
+				
+				// // =============== SOLVER STEP [4] ===============
+				// // [4] Convection or Advection Sub-step: Perform the particle advection
+				// advection_tool.main_advection(particle);      			// [!] later: do 2nd order scheme
+				
+				// // =============== SOLVER STEP [5.1] ===============
+				// // [5.1] Diffusion Sub-step: Calculate the vorticity diffusion & time integration
+				// if (DIM == 2) diffusion_tool.main_diffusion(particle); 	// [!] later: do 2nd order scheme
 
-				// =============== SOLVER STEP [1] ===============
-				// [1] Particle redistribution: rearrange the particle distribution by interpolating vorticity
-				if ((step % Pars::rmsh_inv) == 0){
-					// Particle redistribution (*every given iteration step)
-					remesh_tool.get_remeshing(particle, nodeGridList, step, bodyList);
-				}
+				// // =============== SOLVER STEP [5.2] ===============
+				// // [5.2] Stretching Sub-step: Calculate the vorticity stretching & time integration
+				// if (DIM == 3) stretching_tool.calc_diff_stretch(particle);
+
+				// // // [!] TODO 2: Saving Particle Data
+				// // if ((step % Pars::save_inv == 0)){
+				// // 	// Saving particle data
+				// // 	std::string DataName = utility.saveName(step);		// Write data file name
+				// // 	DataName = "aftStr_" + DataName;
+				// // 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				// // }
+
+				// // =============== SOLVER STEP [1] ===============
+				// // [1] Particle redistribution: rearrange the particle distribution by interpolating vorticity
+				// if ((step % Pars::rmsh_inv) == 0){
+				// 	// Particle redistribution (*every given iteration step)
+				// 	remesh_tool.get_remeshing(particle, nodeGridList, step, bodyList);
+				// }
 
 				// // [!] TODO 2: Saving Particle Data
 				// if ((step % Pars::save_inv == 0)){
@@ -302,15 +317,18 @@ int main(int argc, char const *argv[])
 
 				// =============== SOLVER STEP [2] ===============
 				// [2] Velocity calculation by biot savart: solving Rotational Velocity & Stretching
-				velocity_tool.get_velocity(particle, step);
+				velocity_tool.get_velocity(particle, nodeGridList, step);
 
-				// // [!] TODO 2: Saving Particle Data
-				// if ((step % Pars::save_inv == 0)){
-				// 	// Saving particle data
-				// 	std::string DataName = utility.saveName(step);		// Write data file name
-				// 	DataName = "aftVel_" + DataName;
-				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
-				// }
+				// [!] TODO 2: Saving Particle Data
+				if ((step % Pars::save_inv == 0)){
+					// Saving particle data
+					std::string DataName = utility.saveName(step);		// Write data file name
+					// DataName = "aftVel_" + DataName;
+					save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				}
+				
+				// // Break for 1000 iteration
+				if (step == 0) throw std::exception();
 
 			}	// End of the solver calculation
 
@@ -347,26 +365,23 @@ int main(int argc, char const *argv[])
 
 			// Saving the simulation time for each iteration
 			if (Pars::flag_save_sim_time){
-				if (step == 0){
+				// Print Header
+				if (step == 0 || ((Pars::opt_start_state == 1) && (step == Pars::resume_step+1))){
 					_write.open("output/Simulation_Time.csv");
 					_write << "iteration,sim_time,par_num,comp_time,cum_comp_time\n";
-					_write <<  "" << step
-						   << "," << step * Pars::dt
-						   << "," << particle.num
-						   << "," << curr_comp_time
-						   << "," << cum_comp_time
-						   << "\n";
-					_write.close();
-				}else{
-					_write.open("output/Simulation_Time.csv", std::ofstream::out | std::ofstream::app);
-					_write <<  "" << step
-						   << "," << step * Pars::dt
-						   << "," << particle.num
-						   << "," << curr_comp_time
-						   << "," << cum_comp_time
-						   << "\n";
 					_write.close();
 				}
+				
+				// Print Data
+				_write.open("output/Simulation_Time.csv", std::ofstream::out | std::ofstream::app);
+				_write <<  "" << step
+						<< "," << step * Pars::dt
+						<< "," << particle.num
+						<< "," << curr_comp_time
+						<< "," << cum_comp_time
+						<< "\n";
+				_write.close();
+				
 			}
 
 			// ********************** ITERATION SUMMARY **********************
@@ -452,6 +467,163 @@ int main(int argc, char const *argv[])
 	return 0;
 }
 
+
+#elif (DATA_INTERPOLATION == 1)
+#include "src/grid_block/generateGrid.hpp"
+// =====================================================
+// +--------------- Interpolation Data ----------------+
+// =====================================================
+int main(int argc, char const *argv[])
+{
+	// #pragma region SUBROUTINE_INSTANCES
+		initialization initialization_tool;  // Particle distribution
+		remeshing remesh_tool;               // Particle redistribution
+		simUtil utility;                     // Simulation utilities
+		save_data save_manager;              // Data writing manager
+	// #pragma endregion
+
+	// Main interpolation parameter
+	const int max_iter = Pars::max_iter;
+	const int save_int = 50;	// Pars::save_inv;
+	const int data_num = 1 + max_iter/save_int;
+
+	// Pre-processing prompt display
+	printf("%s#=================================================#%s\n", FONT_RED, FONT_RED);
+	printf("+-------------------- %sSUMMARY%s --------------------+\n", FONT_TORQUOISE, FONT_RED);
+	printf("%s#=================================================#%s\n", FONT_RED, FONT_RESET);
+
+	// Initial flow parameters summary data
+	printf("\n+--------- Interpolation Parameters Data ---------+\n");
+	printf(" Domain x length                       : %7.2f m\n", Pars::lxdomInt);
+	printf(" Domain y length                       : %7.2f m\n", Pars::lydomInt);
+	printf(" Domain z length                       : %7.2f m\n", Pars::lzdomInt);
+	printf(" Core size                             : %7.2f m\n", Pars::sigmaInt);
+	printf(" Total iteration step                  : %9d \n", max_iter);
+	printf(" Step interval                         : %9d \n", save_int);
+	printf(" Number of data                        : %9d \n", data_num);
+	printf("+-------------------------------------------------+\n\n");
+
+
+	// ====================== Simulation Run Prompt ======================
+	// *******************************************************************
+	// Simulation command prompt
+	std::cout << FONT_RESET << "<!> Run the interpolation? ("
+			  << FONT_GREEN << "yes" << FONT_RESET << "/" 
+			  << FONT_RED   << "no"  << FONT_RESET << ")\n" 
+			  << "    Type here: ";
+	
+	// Prompt to continue run the simulation
+	// Give input to the prompt
+	bool _run = false; std::string _cmd; std::cin >> _cmd;
+	// Set the simulation command
+	if (_cmd == "yes" || _cmd == "Yes" || _cmd == "Y" || _cmd == "y") _run = true;
+	else _run = false;
+
+
+	// ================ Iteration for data interpolation =================
+	// *******************************************************************
+	if (_run == true)
+	{
+		// Print banner
+		printf("\n%s#=================================================#%s", FONT_RED, FONT_RED);
+		printf("\n+----------------- %sINTERPOLATION%s -----------------+", FONT_TORQUOISE, FONT_RED);
+		printf("\n%s#=================================================#%s", FONT_RED, FONT_RESET);
+		
+		// Computational time accumulation
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			double _time = omp_get_wtime();
+		#endif
+		
+		// The particle number variable
+		int intParNum;
+
+		for (int n = 0; n < data_num; n++){
+			// Alias to the current iteration
+			const int step = n * save_int;
+			
+			// Print header
+			utility.printHeader(step);
+
+			// Internal variable
+			std::vector<Body> bodyList(N_BODY);  	// Obstacle solid object data list 
+			Particle srcParticle, intParticle;		// Particle data storage
+			GridNode nodeGridList;               	// Node data structure (Particle Related Data)
+
+			// Read the source data
+			#if (DIM == 2)
+				initialization_tool.read_2d_particle(srcParticle, step);
+			#elif (DIM == 3)
+				initialization_tool.read_3d_particle(srcParticle, step);
+			#endif
+
+			// Create grid of source data
+			printf("%s\nGenerate grid block ... %s\n", FONT_CYAN, FONT_RESET);
+			generateGrid grid_step;
+			grid_step.createNode(nodeGridList, srcParticle);
+			
+			// Perform interpolation
+			remesh_tool.re_arrange_distribution(intParticle, srcParticle, nodeGridList);
+			
+			// Save the interpolated data
+			std::string stepName = utility.saveName(step);
+			save_manager.save_par_interpolation(intParticle, stepName);
+
+			// Update the particle number
+			intParNum = intParticle.num;
+		}
+
+		// Interpolation summary!
+		// Particle generation summary time display
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+			double _time = span.count();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			_time = omp_get_wtime() - _time;
+		#endif
+
+		
+		// ======================== Simulation Summary =======================
+		// *******************************************************************
+		time_t now = time(0);			// Present timing
+
+		printf("\n%s+-------------- Simulation Summary ---------------+%s\n", FONT_BLUE, FONT_RESET);
+		printf("Interpolation end at  : %s", std::ctime(&now));
+		printf("Interpolated particle number         : %9d \n", intParNum);
+		
+		if (_time < 60.0){
+			// If simulation runs below than 1 minute
+			printf("Total computational time             : %9.2f s \n", _time);
+		}else if (_time/60.0 < 60.0){
+			// If simulation runs below than 1 hour
+			int time_m = _time/60;
+			double time_s = _time - (time_m*60);
+			printf("Total computational time             : %2dm %5.2f s \n", time_m, time_s);
+		}else{
+			// If simulation runs longer than 1 hour
+			printf("Total computational time             : %9.2f h \n", _time/3600.0);
+		}
+		printf("Average iteration computing time     : %9.2f s \n", _time/data_num);
+		
+
+		// Simulation is done successfully!
+		printf("%s\n<!> The distribution interpolation is finished successfully! %s\n", FONT_GREEN, FONT_RESET);
+	}
+	else{
+		// Interpolation is not executed!
+		printf("%s\n<!> The interpolation is not executed! %s\n", FONT_BLUE, FONT_RESET);
+	}
+	
+
+	return 0;
+}
+#endif
+
 /* PROGRAMMING & SIMULATION NOTEs:
    +) Makefile directory -> c:\program files\gnuwin32\bin\make.exe
    +) To avoid memory leak, please do an initalization for all struct members (e.g, set to be 0)
@@ -529,7 +701,6 @@ int main(int argc, char const *argv[])
 		// particle.vorticity[i] = 1.0;
 	}
 */
-
 
 /* Vibrational Parameter Definition [FURTHER WORK]
 	// ========== Vibrational Parameter Display ==========	

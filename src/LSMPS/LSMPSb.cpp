@@ -24,10 +24,53 @@ template <typename U> using vec = std::vector<U>;
 // =====================================================
 // #pragma region PUBLIC
 
+// NOTE: No big difference between set_LSMPS_2D and set_LSMPS function, both in 2D space
+//        the one with "2D" is the brief version and cancel out the moment matrix recalculation
+
 /**
- *  @brief An LSMPS type B, a function differential calculation of a particle data set 
+ *  @brief A 2D LSMPS type B, a function differential calculation of a particle data set 
  *  toward a source data set. This method also works as an data interpolation to 
  *  predict the function differential at TARGET point from SOURCE data.
+ *  
+ *  @param  xTarget Target particle x coordinate data.
+ *  @param  yTarget Target particle y coordinate data.
+ *  @param  sTarget Target particle size data.
+ *  @param  xSource Source particle x coordinate data.
+ *  @param  ySource Source particle y coordinate data.
+ *  @param  sSource Source particle size data.
+ *  @param  fSource Source particle function value data.
+ *  @param  neighborListSource The neighbor relation of target particle data toward source particle.
+*/
+void LSMPSb::set_LSMPS_2D(const vec<double> &xTar, const vec<double> &yTar, const vec<double> &sTar,
+                          const vec<double> &xSrc, const vec<double> &ySrc, const vec<double> &sSrc, const vec<double> &fSrc,
+                          const vec<vec<int>> &nghListSrc)
+{
+    // clear local variables
+    this->_d0.clear();
+    this->_ddx.clear();
+    this->_ddy.clear();
+    this->_d2d2x.clear();
+    this->_d2dxdy.clear();
+    this->_d2d2y.clear();
+
+    // resize local variabels
+    int nparticle = sTar.size();
+    this->_d0.resize(nparticle);
+    this->_ddx.resize(nparticle);
+    this->_ddy.resize(nparticle);
+    this->_d2d2x.resize(nparticle);
+    this->_d2dxdy.resize(nparticle);
+    this->_d2d2y.resize(nparticle);
+
+    // perform calculation
+    this->calculate_LSMPS_2D(xTar, yTar, sTar, xSrc, ySrc, sSrc, fSrc, nghListSrc);
+}
+
+/**
+ *  @brief A 2D LSMPS type B, a function differential calculation of a particle data set 
+ *  toward a source data set. This method also works as an data interpolation to 
+ *  predict the function differential at TARGET point from SOURCE data. 
+ *  NOTE: Added by moment matrix element recalculation for low determinant matrix.
  *  
  *  @param  xTarget Target particle x coordinate data.
  *  @param  yTarget Target particle y coordinate data.
@@ -134,6 +177,140 @@ void LSMPSb::set_LSMPS_3D(const vec<double> &xTar, const vec<double> &yTar, cons
  *  @param  xTarget Target particle x coordinate data.
  *  @param  yTarget Target particle y coordinate data.
  *  @param  sTarget Target particle size data.
+ *  @param  xSource Source particle x coordinate data.
+ *  @param  ySource Source particle y coordinate data.
+ *  @param  sSource Source particle size data.
+ *  @param  fSource Source particle function value data.
+ *  @param  neighborListSource The neighbor relation of target particle data toward source particle.
+*/
+void LSMPSb::calculate_LSMPS_2D(const vec<double> &xTar, const vec<double> &yTar, const vec<double> &sTar,
+                                const vec<double> &xSrc, const vec<double> &ySrc, const vec<double> &sSrc, const vec<double> &fSrc,
+                                const vec<vec<int>> &nghListSrc)
+{   
+    // Take the number of particle
+    int nTarget = sTar.size();
+
+    // Evaluate the LSMPS B of all target particle
+    #pragma omp parallel for
+    for (int i = 0; i < nTarget; i++)
+    {
+        // Evaluate the neighbor of the evaluated GRID
+        const vec<int> &_nghSrcID = nghListSrc[i];
+
+        // Check whether the number of neighbor is adequate for LSMPS calculation
+        if (_nghSrcID.size() <= 6){
+            // If the number of neighbor is not adequate, the target differential value set to zero
+            this->_d0[i]     = 0.0e0;
+            this->_ddx[i]    = 0.0e0;
+            this->_ddy[i]    = 0.0e0;
+            this->_d2d2x[i]  = 0.0e0;
+            this->_d2dxdy[i] = 0.0e0;
+            this->_d2d2y[i]  = 0.0e0;
+        }
+        else{
+            // Initialize the LSMPS matrices
+            MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D, BASE_SIZE_2D);   // Scaling matrix
+            MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D, BASE_SIZE_2D);   // Moment matrix
+            VectorXd bbar = VectorXd::Zero(BASE_SIZE_2D);              // Moment vector
+
+            // Scaling size (using the target particle size)
+            double _rs = sTar[i];
+            
+            // Initialize H_rs Matrix
+            Hbar(0, 0) = 1;
+            Hbar(1, 1) = std::pow(_rs, -1);
+            Hbar(2, 2) = std::pow(_rs, -1);
+            Hbar(3, 3) = std::pow(_rs, -2) * 2;
+            Hbar(4, 4) = std::pow(_rs, -2);
+            Hbar(5, 5) = std::pow(_rs, -2) * 2;
+
+            // Calculate the moment matrix [Mbar] and vector [bbar] (Evaluate toward neighbor source particle)
+            for (size_t j = 0; j < _nghSrcID.size(); j++)
+            {
+                // Aliasing the particle ID
+                const int &idxi = i;                // Target particle ID
+                const int &idxj = _nghSrcID[j];     // Neighbor particle ID
+                
+                // Evaluated particle coordinate (TARGET particle)
+                double _xi = xTar[idxi]; 
+                double _yi = yTar[idxi];
+                
+                // Neighbor particle coordinate (SOURCE particle)
+                double _xj = xSrc[idxj];
+                double _yj = ySrc[idxj];
+                
+                // Coordinate distance between TARGET and SOURCE
+                double _dx = _xj - _xi;       // x distance between TARGET[i] and neighbor: SOURCE[j]
+                double _dy = _yj - _yi;       // y distance between TARGET[i] and neighbor: SOURCE[j]
+
+                // Resultant distance(_rij) and effective radius(_Re)
+                double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
+                double _Re = 0.0;
+                switch (INTERACTION_TYPE){
+                case 1: // Effective radius type 1 (self particle size)
+                    _Re = RADIUS_FACTOR_2D * sTar[idxi];
+                    break;
+                case 2: // Effective radius type 2 (average particle size)
+                    _Re = RADIUS_FACTOR_2D * (sTar[idxi] + sSrc[idxj]) * 0.5;
+                    break;
+                default:
+                    break;
+                }
+
+                // No effect from the current neighbor (or neighbor outside the support domain)
+                if (_rij > _Re) continue;
+
+                // Calculate the weight value
+                double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
+                _wij *= std::pow(sSrc[idxj]/sTar[idxi],2.0);        // Add the relative size factor between particle
+                
+                // Calculate the distance vector p
+                const vec<double> _P = this->get_p(_dx, _dy, _rs);
+
+                // LSMPS B interpolated variable value SOURCE
+                double _fij = fSrc[idxj] - 0.0e0; 
+
+                // Calculation of moment matrix Mbar and bbar
+                for (size_t k1 = 0; k1 < BASE_SIZE_2D; k1++){
+                    for (size_t k2 = 0; k2 < BASE_SIZE_2D; k2++){
+                        // generate tensor product between p
+                        Mbar(k1, k2) = Mbar(k1, k2) + (_wij * _P[k1] * _P[k2]);
+                    }
+                    // generate moment matrix
+                    bbar(k1) = bbar(k1) + (_wij * _P[k1] * _fij);
+                }
+            }
+
+            // Solve Least Square Matrix Operation
+            // --- Method 1 ---     LU Decomposition
+            VectorXd MbarInv_Bbar = Mbar.lu().solve(bbar);
+            // --- Method 2 ---     House Holder QR 
+            // VectorXd MbarInv_Bbar = Mbar.fullPivHouseholderQr().solve(bbar);
+            // --- Method 3 ---     Singular Value Decomposition
+            // VectorXd MbarInv_Bbar = Mbar.bdcSvd(ComputeThinU | ComputeThinV).solve(bbar);
+            
+            // Final result
+            VectorXd Df = Hbar * MbarInv_Bbar; 
+
+            // Assign the LSMPS B result
+            this->_d0[i]     = Df[0];
+            this->_ddx[i]    = Df[1];
+            this->_ddy[i]    = Df[2];
+            this->_d2d2x[i]  = Df[3];
+            this->_d2dxdy[i] = Df[4];
+            this->_d2d2y[i]  = Df[5];
+        }
+    }
+}
+
+/**
+ *  @brief An LSMPS type B, a function differential calculation of a particle data set 
+ *  toward a source data set. This method also works as an data interpolation to 
+ *  predict the function differential at TARGET point from SOURCE data.
+ *  
+ *  @param  xTarget Target particle x coordinate data.
+ *  @param  yTarget Target particle y coordinate data.
+ *  @param  sTarget Target particle size data.
  *  @param  fTarget Target particle function value data.
  *  @param  xSource Source particle x coordinate data.
  *  @param  ySource Source particle y coordinate data.
@@ -229,7 +406,7 @@ void LSMPSb::calculate_LSMPS(const vec<double> &xTar, const vec<double> &yTar, c
             {
                 // Aliasing the particle ID
                 const int &idxi = i;                // Target particle ID
-                const int &idxj = _nghSrcID[j];     // Neighor particle ID
+                const int &idxj = _nghSrcID[j];     // Neighbor particle ID
                 
                 // Evaluated particle coordinate (TARGET particle)
                 double _xi = xTar[idxi]; 

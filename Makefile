@@ -46,6 +46,7 @@ SRCS			= main.cpp\
 				src/initialization/initialization.cpp\
 				src/initialization/init2D.cpp\
 				src/initialization/init3D.cpp\
+				src/initialization/initVor.cpp\
 				src/neighbor/neighbor_utilities/base_grid.cpp\
 				src/neighbor/direct/direct_find.cpp\
 				src/neighbor/link_list/link_list.cpp\
@@ -58,6 +59,7 @@ SRCS			= main.cpp\
 				src/neighbor/neighbor.cpp\
 				src/adaptation/adaptation.cpp\
 				src/remeshing/redistribute_particles.cpp\
+				src/remeshing/interpolate.cpp\
 				src/remeshing/remeshing.cpp\
 				src/LSMPS/LSMPSa.cpp\
 				src/LSMPS/LSMPSb.cpp\
@@ -75,11 +77,12 @@ SRCS			= main.cpp\
 				src/penalization/penalization_calc.cpp\
 				src/penalization/penalization.cpp\
 				src/force_calculation/force_calc.cpp\
-				src/force_calculation/force_output.cpp\
 				src/force_calculation/force_linear_impulse.cpp\
 				src/advection/main_advection.cpp\
 				src/diffusion/main_diffusion.cpp\
 				src/stretching/main_stretching.cpp\
+				src/LSMPS_poisson/poissonLSMPS.cpp\
+				# src/force_calculation/force_output.cpp\
 				# src/solver_poisson/solver.cpp\
 				# src/solver_poisson/solver_poisson.cpp\
 				# src/diffusion/pse.cpp\

@@ -77,11 +77,36 @@ namespace Pars{
 }
 
 // #pragma region BASIC_CONSTANT_PARAMETER
-    #define DIM 2                   // The domain spatial dimension, 2:= 2D simulation; 3:= 3D simulation
-    #define N_BODY 1                // The number of obstacle body object
-    #define TIMER_PAR 1             // A parallel timer
+    /** 
+     * The domain spatial dimension:
+     *  2:= 2D simulation; 
+     *  3:= 3D simulation
+    */
+    #define DIM 2
+
+    /** 
+     * @brief  The number of obstacle body object
+    */
+    #define N_BODY 0
+
+    /** 
+     * A parallel timer flag:
+     *  0:= Timer using chrono
+     *  1:= Timer using parallel package
+    */
+    #define TIMER_PAR 1
+
     // #define PRECISION_FACTOR 1e-5   // A number factor to avoid wrong <double> to <int> truncation (e.g. calculating grid count from domain length division toward grid length)
+    
+    /** 
+     * The flag to perform property interpolation (post processing):
+     *  0:= Basic default calculation
+     *  1:= Calculate the data interpolation [POST-PROCESS]
+     * NOTE: Only work for data based on grid node calculation
+    */
+    #define DATA_INTERPOLATION 0
 // #pragma endregion
+
 
 /**
  *  @brief  A shorthand of a for loop through the dimension basis. (see global.hpp)
@@ -162,6 +187,14 @@ namespace Pars
             5:= Grid Node Based
         */
         extern const int opt_init_particle;
+
+        /* [O] The vorticity initialization type option:
+            0:= No initialized vorticity;
+            1:= Perlman vorticity;
+            2:= Reserved ...;
+            3:= Reserved ...;
+        */
+        extern const int opt_init_vorticity;
 
         /* [O] The body type option:
                     2D simulation   |   3D simulation   
@@ -453,6 +486,17 @@ namespace Pars
         extern const double U_star;     //!! ROTATION PARAMETER, STILL BUGGED
         extern const double tetha_nol;  //equilibrium angular position of spring [deg] //!! ROTATION PARAMETER, STILL BUGGED
     // #pragma endregion VIBRATION_PARAMETER
+
+    // =====================================================
+    // +-------------- Interpolation Process --------------+
+    // =====================================================
+    // #pragma region INTERPOLATION_PARAMETER
+        extern const double lxdomInt;   // [I] Initial domain length on x-axis
+        extern const double lydomInt;   // [I] Initial domain length on y-axis
+        extern const double lzdomInt;   // [I] Initial domain length on z-axis
+        extern const double xdomInt;    // [I] Negative x-direction domain length
+        extern const double sigmaInt;   // [I] Initial domain center (x-axis), default 0.0
+    // #pragma endregion INTERPOLATION_PARAMETER
 
 } // namespace Pars
 

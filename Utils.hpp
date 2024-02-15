@@ -140,9 +140,9 @@ struct Particle{
 	*/
 
 	// // Boundary terms <?> For boundary treatment <?> Not really need for LSMPS
-	// std::vector<bool> isboundary;
+	std::vector<bool> isBoundary;
+	std::vector<double> boundaryVal;
 	// std::vector<bool> inside; 
-	// std::vector<double> boundaryval;
 
 	// Constructor
 	Particle() : num(0), isAdapt(false){};

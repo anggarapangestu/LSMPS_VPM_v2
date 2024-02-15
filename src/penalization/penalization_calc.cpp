@@ -328,7 +328,7 @@ void penalization::no_slip_3d(Particle &_p,
 	// Update the vorticity
 	_basePar.vorticity.resize(_basePar.num,0.0);
 	#pragma omp parallel for
-    for (int i = 0; i < _p.num; i++){
+    for (int i = 0; i < _basePar.num; i++){
 		_basePar.vorticity[i] = std::sqrt(
 			_basePar.vortx[i]*_basePar.vortx[i] +
 			_basePar.vorty[i]*_basePar.vorty[i] +

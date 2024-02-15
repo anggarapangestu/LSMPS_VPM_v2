@@ -4,6 +4,7 @@
 #include "../../Utils.hpp"
 #include "../neighbor/neighbor.hpp"
 #include "../adaptation/adaptation.hpp"
+#include "../grid_block/gridNode.hpp"
 
 class remeshing
 {
@@ -23,6 +24,13 @@ class remeshing
 	void redistribute_particles(Particle &_particle);
 	void redistribute_active_particles(Particle &_particle);
 	void set_particle_sign();
+	
+	void interpolate(std::vector<double> &_targetValue,
+					 const Particle &_targetPar,
+					 const Particle &_sourcePar,
+					 const std::vector<double> &_sourceValue);
+	
+	void save_interpolation(const Particle &_targetPar, const Particle &_sourcePar);
 
 public:
 	// Remeshing initialization and neighbor search
@@ -31,6 +39,9 @@ public:
 	// Remeshing method (*adaptation + redistribution)
 	void get_remeshing(Particle &_particle, GridNode &_baseGrid, 
 					   const int _iteration, const std::vector<Body> &_bodyList);
+
+	// Interpolate the particle data into the new given distribution
+	void re_arrange_distribution(Particle &_targetPar, const Particle &_sourcePar, const GridNode &_baseGrid);
 };
 
 #endif

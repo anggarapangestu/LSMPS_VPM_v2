@@ -139,10 +139,11 @@ void save_data::write_summary_log(){
 	}
 	data << "Initialization option                   : " << "type " << Pars::opt_init_particle << "\n"
 		 << "Neighbor search option                  : " << "type " << Pars::opt_neighbor << "\n"
-		 << "Penalization option                     : " << "type " << Pars::opt_pen << "\n";
+		 << "Penalization option                     : " << "type " << Pars::opt_pen << "\n"
+	     << "Penalization constant                   : " << w8 << wR << Pars::lambda << "\n";
 	data << std::fixed << std::setprecision(4)
-	     << "Number of save data                     : " << w6 << wR << Pars::file_num << "\n"
-		 << "Saving step interval                    : " << w6 << wR << Pars::step_inv << "\n"
+		 << "Number of saved data                    : " << w6 << wR << Pars::max_iter/Pars::save_inv << "\n"
+		 << "Saving step interval                    : " << w6 << wR << Pars::save_inv << "\n"
 		 << "Support radius factor                   : " << w6 << wR << Pars::r_sup << "\n"
 		 << "Buffer radius factor                    : " << w6 << wR << Pars::r_buff << "\n"
 		 << "Maximum resolution level                : " << Pars::max_level << " levels\n"

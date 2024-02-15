@@ -26,16 +26,20 @@ private:
 
     // Member method
 
-    void updateGridNode(GridNode& nodeList);
-    void generateRootRec(GridNode& nodeList, int dim, int &ID, int index[DIM]) const;
-    void generateRootDir(GridNode& nodeList) const;
+    void updateGridNode(GridNode &nodeList);
+    void generateRootRec(GridNode &nodeList, int dim, int &ID, int index[DIM]) const;
+    void generateRootDir(GridNode &nodeList) const;
     
 public:
     // Public method
 
-    void nodeGeneration(GridNode& nodeList, const std::vector<Body>& bodyList);
-    void createNode(GridNode& nodeList, Particle &particle);
     void setNghLvlDiff(int diff);
+    void nodeGeneration(GridNode &nodeList, const std::vector<Body> &bodyList);
+    void nodeGeneration(GridNode &nodeList);
+    void createNode(GridNode &nodeList, Particle &particle);
+    void assignNodeID(const GridNode &baseGrid, 
+                      std::unordered_map<int, std::vector<int>> &mapNode, 
+                      Particle &evalParticle);
     
     // Constructor
     generateGrid();

@@ -37,8 +37,14 @@ private:
     void get_p_3d(std::vector<double> &_P, const double dx, const double dy, const double dz, const double rs);
     double weight_function(const double &_rij, const double &_Re);
 
-    // LSMPS B calculation
+    // LSMPS B calculation 2D
 
+    void calculate_LSMPS_2D(const std::vector<double> &xTarget, const std::vector<double> &yTarget,
+                            const std::vector<double> &sTarget,
+                            const std::vector<double> &xSource, const std::vector<double> &ySource,
+                            const std::vector<double> &sSource, const std::vector<double> &fSource,
+                            const std::vector<std::vector<int>> &neighborListSource);
+    
     void calculate_LSMPS(const std::vector<double> &xTarget, const std::vector<double> &yTarget,
                          const std::vector<double> &sTarget, const std::vector<double> &fTarget,
                          const std::vector<double> &xSource, const std::vector<double> &ySource,
@@ -47,6 +53,7 @@ private:
                          const std::vector<std::vector<int>> &neighborListSelf);
 
     // LSMPS B Calculation 3D
+
     void calculate_LSMPS_3D(const std::vector<double> &xTarget, const std::vector<double> &yTarget, const std::vector<double> &zTarget,
                             const std::vector<double> &sTarget, const std::vector<double> &fTarget,
                             const std::vector<double> &xCollocation, const std::vector<double> &yCollocation, const std::vector<double> &zCollocation,
@@ -54,7 +61,13 @@ private:
                             const std::vector<std::vector<int>> &neighborListSource,
                             const std::vector<std::vector<int>> &neighborListSelf);
 public:
-    // LSMPS B maanger
+    // LSMPS B manager
+
+    void set_LSMPS_2D(const std::vector<double> &xTarget, const std::vector<double> &yTarget,
+                      const std::vector<double> &sTarget,
+                      const std::vector<double> &xSource, const std::vector<double> &ySource,
+                      const std::vector<double> &sSource, const std::vector<double> &fSource,
+                      const std::vector<std::vector<int>> &neighborListSource);
 
     void set_LSMPS(const std::vector<double> &xTarget, const std::vector<double> &yTarget,
                    const std::vector<double> &sTarget, const std::vector<double> &fTarget,

@@ -181,6 +181,7 @@ void penalization::get_penalization(Particle &_currPar, const std::vector<Body> 
                 _currPar.vortx[ID] = 0;
                 _currPar.vorty[ID] = 0;
                 _currPar.vortz[ID] = 0;
+                _currPar.vorticity[ID] = 0;
             }
         }
     #endif

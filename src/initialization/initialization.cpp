@@ -7,6 +7,57 @@
 // #pragma region PUBLIC_METHOD
 
 /**
+ *  @brief  Update the flag of particle near the domain boundary.
+ *         
+ *  @param  _particle  Particle data container.
+*/
+void initialization::update_domain_boundary(Particle &_par){
+    // Reserve the flag container data
+    _par.isBoundary = std::vector<bool>(_par.num, false);   // Update the flag size
+    _par.boundaryVal = std::vector<double>(_par.num, 0.0);  // Update the boundary value <!> Still not constructed, define with 0 element <!>
+
+    // Get the domain extremes
+    std::vector<double> maxPos(DIM, 0.0);
+    std::vector<double> minPos(DIM, 0.0);
+
+    for (int i = 0; i < _par.num; i++){
+        // Update the x basis
+        if (_par.x[i] > maxPos[0]) maxPos[0] = _par.x[i];
+        if (_par.x[i] < minPos[0]) minPos[0] = _par.x[i];
+
+        // Update the y basis
+        if (_par.y[i] > maxPos[1]) maxPos[1] = _par.y[i];
+        if (_par.y[i] < minPos[1]) minPos[1] = _par.y[i];
+
+        #if (DIM == 3)
+            // Update the z basis
+            if (_par.y[i] > maxPos[1]) maxPos[1] = _par.y[i];
+            if (_par.y[i] < minPos[1]) minPos[1] = _par.y[i];
+        #endif
+    }
+
+    // Just need to iterate all particle
+    for (int i = 0; i < _par.num; i++){
+        // Check the location of particle
+        // Check in x direction
+        if ((_par.x[i] < (minPos[0] + _par.s[i]/2.0)) ||
+            (_par.x[i] > (maxPos[0] - _par.s[i]/2.0)) )
+        {
+            _par.isBoundary[i] = true;
+        }
+        
+        // Check in y direction
+        if ((_par.y[i] < (minPos[1] + _par.s[i]/2.0)) ||
+            (_par.y[i] > (maxPos[1] - _par.s[i]/2.0)) )
+        {
+            _par.isBoundary[i] = true;
+        }
+    }
+
+    return;
+}
+
+/**
  *  @brief  Particle initialization manager. Generate the particle based on the given
  *  criteria defined by user in global.cpp.
  *         
@@ -73,6 +124,63 @@ void initialization::initialize_particle(Particle &_par, const std::vector<Body>
     return;
 }
 
+
+/**
+ *  @brief  Generate the initial value of vorticity field.
+ *         
+ *  @param  _particle  Particle data for vorticity calculation.
+ * 
+ *  @return No return.
+*/
+void initialization::initialize_vorticity(Particle &_par){
+    // Check the vorticity initialization type
+    if (Pars::opt_init_vorticity == 0){
+        return;
+    }
+
+    // Display prompt
+    printf("\n+----------- Vorticity Field Generation ----------+\n");
+    printf("Generate the voriticy field ...\n");
+
+    // Computational time accumulation
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        double _time = omp_get_wtime();
+    #endif
+
+    // Vorticity field type selection
+    switch (Pars::opt_init_vorticity){
+    case 1: // Perlman vorticity
+        printf("%sType 1: Perlman vorticity%s\n", FONT_CYAN, FONT_RESET);
+        this->perlman_vorticity(_par);
+        this->perlman_velocity_solution(_par);
+        break;
+    case 2: // Reserve ...
+        printf("%sType 2: Reserved ... %s\n", FONT_CYAN, FONT_RESET);
+        // this->perlman_vorticity(_par);
+        break;
+    default:
+        break;
+    }
+
+    // Vorticity generation summary time display
+    #if (TIMER_PAR == 0)
+        // Timer using super clock (chrono)
+        std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+        double _time = span.count();
+    #elif (TIMER_PAR == 1)
+        // Timer using paralel package
+        _time = omp_get_wtime() - _time;
+    #endif
+	printf("<-> Vorticity generation comp. time    [%f s]\n", _time);
+
+    printf("+-------------------------------------------------+\n");
+    return;
+}
+
 // #pragma endregion
 
 // ===================================================== //
@@ -101,6 +209,13 @@ void initialization::generate_particle(Particle &p, const std::vector<Body> &bL,
     // Initialization for 2D simulation
     else if(DIM == 2){
         switch (Pars::opt_init_particle){
+        case 0:
+            // [Test] Initialization
+            //  * Put your initialization testing here ...
+            printf("%sType 0: Testing distribution %s\n", FONT_CYAN, FONT_RESET);
+            // this->init_2d_test_1(p);
+            this->init_2d_test_2(p);
+            break;
         case 1:
             // Single Resolution Particle Distribution
             printf("%sType 1: Single resolution %s\n", FONT_CYAN, FONT_RESET);
@@ -120,10 +235,6 @@ void initialization::generate_particle(Particle &p, const std::vector<Body> &bL,
             // Multi Resolution Body Adjusted Particle Distribution
             printf("%sType 4: Multi resolution body adjusted %s\n", FONT_CYAN, FONT_RESET);
             this->init_2d_multi_res_body_adjusted(p, bL);
-            break;
-        case 0:
-            // [Test] Initialization
-            //  * Put your initialization testing here ...
             break;
         default:
             break;
@@ -205,9 +316,15 @@ void initialization::read_2d_particle(Particle &_par, int _iter){
     _par.P.clear();
     
     // Construct the file directory name
+    #if (DATA_INTERPOLATION == 0)
     std::string fileName = "input/resume_data/particle_state_";
+    #elif (DATA_INTERPOLATION == 1)
+    std::string fileName = "output/particle_state_";
+    #endif
     simUtil util_tool;
     fileName += util_tool.saveName(_iter) + ".csv";
+    
+    // MESSAGE_LOG << "The filename " << fileName << " is about to read!\n";
 
     // Internal variable
     std::vector<double> dataList;
@@ -300,6 +417,8 @@ void initialization::read_2d_particle(Particle &_par, int _iter){
 
         if (Pars::flag_pressure_calc)
         _par.P.push_back(P);
+
+        // MESSAGE_LOG << "Done particle " << _par.num << " !\n";
         
     }
     reader.close();
@@ -343,7 +462,11 @@ void initialization::read_3d_particle(Particle &_par, int _iter){
     _par.P.clear();
     
     // Construct the file directory name
+    #if (DATA_INTERPOLATION == 0)
     std::string fileName = "input/resume_data/particle_state_";
+    #elif (DATA_INTERPOLATION == 1)
+    std::string fileName = "output/particle_state_";
+    #endif
     simUtil util_tool;
     fileName += util_tool.saveName(_iter) + ".csv";
 
@@ -470,7 +593,15 @@ void initialization::read_3d_particle(Particle &_par, int _iter){
 void initialization::init_par_grid_block(Particle &par, const std::vector<Body> &_bodyList, GridNode &_gridNode){
     // Generate Node List
     generateGrid grid_step;
-    grid_step.nodeGeneration(_gridNode, _bodyList);
+    if (N_BODY == 0){
+        // Generating a node with single resolution
+        std::cout << "Generate max level resolution node ...\n";
+        grid_step.nodeGeneration(_gridNode);
+    }else{
+        // Generating a node body adapted
+        std::cout << "Generate body adapted node ...\n";
+        grid_step.nodeGeneration(_gridNode, _bodyList);
+    }
 
     // Reserve the memory for particle data
     par.x.clear();

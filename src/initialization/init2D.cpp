@@ -8,6 +8,249 @@
 // Initialize the data of coordinate [x,y,z], size and level [s, level], and number [num]
 
 /**
+ *  @brief  A testing particle distribution. A resolution of 2 level that split the 
+ *  domain into two region whether in x or y direction.
+ *         
+ *  @param  _particle  Particle data container.
+*/
+void initialization::init_2d_test_1(Particle &par){
+    // internal temporary variable
+    double _y, _x;
+
+    // ====== PARTICLE GENERATION ====== //
+    // number of particle in x and y direction
+    int _nx = std::ceil(0.5 * Pars::lxdom / Pars::sigma);   // Number of particle in x direction
+    int _ny = std::ceil(0.5 * Pars::lydom / Pars::sigma);   // Number of particle in y direction
+    int _nparticle = _nx * _ny;                             // Number of all particle
+
+    // Adjust the size of vector into the calculated particle number
+    par.x.resize(_nparticle, 0.0e0);
+    par.y.resize(_nparticle, 0.0e0);
+    par.s.resize(_nparticle, 2 * Pars::sigma);
+    par.level.resize(_nparticle, Pars::max_level - 1);
+    par.num = _nparticle;
+
+    // Simulation domain pivot coordinate
+    double pivX = -Pars::xdom;              // Location of the most left (x)
+    double pivY = -Pars::sigma*_ny;         // Location of the most bottom (y)
+
+    // Generate the particle position
+    int count = 0;
+    for (int i = 0; i < _nx; i++){
+        for (int j = 0; j < _ny; j++){
+            _x = pivX + (i+0.5)*2*Pars::sigma;
+            _y = pivY + (j+0.5)*2*Pars::sigma + Pars::mp_shift;   // Additional of unbalance: Pars::mp_shift
+            par.x[count] = _x;
+            par.y[count] = _y;
+            count ++;
+        }
+    }
+    
+    // ====== DIVIDE AND CONQUEROR PROCEDURE ====== //
+    // Set the particle division type
+    int type = 0;               // 0:= split in x direction; 1:= split in y direction
+    bool up_region = true;      // 0:= divide the lower coordinate region; 1:= divide the higher coordinate region
+    double split_loc = -2.6;    // The location of splitting
+
+    // Perform the devide and conqueror if the point inside the finer resolution block
+    int chdTrans[DIM];
+    
+    // Iterate through all current particle
+    for (int i = 0; i < _nparticle; i++){
+        // Check if the particle need to be devided
+        if (type == 0){
+            // Split in x direction
+            if (up_region && par.x[i] < split_loc) continue;
+            else if (!up_region && par.x[i] > split_loc) continue;
+        }else if (type == 1){
+            // Split in y direction
+            if (up_region && par.y[i] < split_loc) continue;
+            else if (!up_region && par.y[i] > split_loc) continue;
+        }
+        
+        // ** Proceed the Divide and Conqueror Process        
+        // Take the parent particle coordinate
+        _x = par.x[i];
+        _y = par.y[i];
+        
+        // Point 1  -> Replace the parent data
+        par.x[i] = _x - 0.5 * Pars::sigma;
+        par.y[i] = _y - 0.5 * Pars::sigma;
+        par.s[i] = Pars::sigma;
+        par.level[i] = Pars::max_level;
+
+        // Point 2-4  -> Add new particle data
+        for (int j = 1; j < 4; j++){
+            basis_loop(d) chdTrans[d] = (2*((j>>d)%2)) - 1;
+            par.x.push_back(_x + 0.5 * Pars::sigma * chdTrans[0]);
+            par.y.push_back(_y + 0.5 * Pars::sigma * chdTrans[1]);
+            par.s.push_back(Pars::sigma);
+            par.level.push_back(Pars::max_level);
+            par.num++;
+        }
+    }
+    
+    return;
+}
+
+/**
+ *  @brief  A testing particle distribution. A resolution of 2 level that split the 
+ *  domain into two region whether in x or y direction.
+ *  NOTE: Similar result with test 1 but different data ordering
+ *         
+ *  @param  _particle  Particle data container.
+*/
+void initialization::init_2d_test_2(Particle &par){
+    // internal temporary variable
+    double _y, _x;
+
+    // ====== PARTICLE GENERATION ====== //
+    // Set the particle division type
+    int type = 1;               // 0:= split in x direction; 1:= split in y direction
+    bool up_region = true;      // 0:= divide the lower coordinate region; 1:= divide the higher coordinate region
+    bool splitted;              // Flag that denote whether the domain is splitted or not
+    double split_loc = -0.5;    // The location of splitting
+
+    // Split into two region
+    // Check if the particle need to be devided
+    if (type == 0){
+        // Split in x direction
+        if (-Pars::xdom < split_loc && Pars::lxdom - Pars::xdom > split_loc){
+            // The split location is inside the 
+            splitted = true;
+        }
+        else{
+            // The split location is outside the region
+            splitted = false;
+        }
+    }else if (type == 1){
+        // Split in y direction
+        if (-Pars::lydom/2 < split_loc && Pars::lydom/2 > split_loc){
+            // The split location is inside the 
+            splitted = true;
+        }
+        else{
+            // The split location is outside the region
+            splitted = false;
+        }
+    }
+    
+    // Divert in two type of particle arrangement
+    if (!splitted){
+        // The type one : only one resolution
+        std::cout << "|O| Only a single resolution\n";
+        this->init_2d_single_res(par);
+    }
+    else if (splitted){
+        // The type two : splitted domain
+        std::cout << "|A| A splitted domain distribution\n";
+        
+        // Number of particle in x and y direction
+        int _nx, _ny;       // Number of particle in x and y direction
+        int _nparticle;     // Number of all particle
+        
+        // Simulation domain pivot coordinate
+        double pivX, pivY;  // Pivot location of the most left (x) and the most bottom (y)
+        double size;
+
+        // [1] Generate the first region
+        // *****************************
+        size = up_region ? (2*Pars::sigma) : (Pars::sigma);
+        if (type == 0){
+            // Splitted in x direction
+            // Update the number of particle in x and y direction
+            _nx = std::ceil((split_loc + Pars::xdom) / size);
+            _ny = std::ceil(Pars::lydom / size);
+            _nparticle = _nx * _ny;
+            
+            // Simulation domain pivot coordinate
+            pivX = split_loc - (_nx*size);   // Location of the most left (x)
+            pivY = - (_ny*size) / 2.0;       // Location of the most bottom (y)
+        }
+        else if (type == 1){
+            // Splitted in y direction
+            // Update the number of particle in x and y direction
+            _nx = std::ceil(Pars::lxdom / size);
+            _ny = std::ceil((split_loc + (Pars::lydom / 2.0)) / size);
+            _nparticle = _nx * _ny;
+            
+            // Simulation domain pivot coordinate
+            pivX = -Pars::xdom;              // Location of the most left (x)
+            pivY = split_loc - (_ny*size);   // Location of the most bottom (y)
+        }
+
+        // Adjust the size of vector into the calculated particle number
+        par.num = _nparticle;
+        par.x.resize(par.num, 0.0e0);
+        par.y.resize(par.num, 0.0e0);
+        par.s.resize(par.num, size);
+        par.level.resize(par.num, up_region ? Pars::max_level - 1 : Pars::max_level);
+
+        // Generate the particle position
+        int count = 0;
+        for (int i = 0; i < _nx; i++){
+            for (int j = 0; j < _ny; j++){
+                _x = pivX + (i+0.5)*size;
+                _y = pivY + (j+0.5)*size + Pars::mp_shift;   // Additional of unbalance: Pars::mp_shift
+                par.x[count] = _x;
+                par.y[count] = _y;
+                count++;
+            }
+        }
+        std::cout << "|X| Done generating the first (1st) part\n";
+
+
+        // [2] Generate the second region
+        // *****************************
+        size = up_region ? Pars::sigma : 2*Pars::sigma;
+        if (type == 0){
+            // Splitted in x direction
+            // Update the number of particle in x and y direction
+            _nx = std::ceil((Pars::lxdom - split_loc - Pars::xdom) / size);
+            _ny = std::ceil(Pars::lydom / size);
+            _nparticle = _nx * _ny;
+            
+            // Simulation domain pivot coordinate
+            pivX = split_loc;   // Location of the most left (x)
+            pivY = - (_ny*size) / 2.0;       // Location of the most bottom (y)
+        }
+        else if (type == 1){
+            // Splitted in y direction
+            // Update the number of particle in x and y direction
+            _nx = std::ceil(Pars::lxdom / size);
+            _ny = std::ceil(((Pars::lydom / 2.0) - split_loc) / size);
+            _nparticle = _nx * _ny;
+            
+            // Simulation domain pivot coordinate
+            pivX = -Pars::xdom;              // Location of the most left (x)
+            pivY = split_loc;   // Location of the most bottom (y)
+        }
+
+        // Adjust the size of vector into the calculated particle number
+        par.num += _nparticle;
+        par.x.resize(par.num, 0.0e0);
+        par.y.resize(par.num, 0.0e0);
+        par.s.resize(par.num, size);
+        par.level.resize(par.num, up_region ? Pars::max_level : Pars::max_level - 1);
+
+        // Generate the particle position
+        for (int i = 0; i < _nx; i++){
+            for (int j = 0; j < _ny; j++){
+                _x = pivX + (i+0.5)*size;
+                _y = pivY + (j+0.5)*size + Pars::mp_shift;   // Additional of unbalance: Pars::mp_shift
+                par.x[count] = _x;
+                par.y[count] = _y;
+                count++;
+            }
+        }
+
+        std::cout << "|X| Done generating the second (2nd) part\n";
+    }
+    
+    return;
+}
+
+/**
  *  @brief  Uniform single resolution distribution for 2D simulation.
  *         
  *  @param  _particle  Particle data container.
@@ -34,7 +277,7 @@ void initialization::init_2d_single_res(Particle &par)
         for (int j = 0; j < _ny; j++){
             _x = pivX + (i + 0.5)*Pars::sigma;
             _y = pivY + (j + 0.5)*Pars::sigma + Pars::mp_shift;
-                                         // Additional of unbalance for early separation (mp_shift)
+                                        // Additional of unbalance for early separation (mp_shift)
             // Assign the particle
             par.x[count] = _x;
             par.y[count] = _y;

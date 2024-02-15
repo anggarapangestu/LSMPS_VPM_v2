@@ -126,8 +126,27 @@ struct GridNode
      *  @brief  Mapping of the Node by its corresponding ID <_ID, _Node>.
      *  @tparam _ID     The ID of the Node.
      *  @tparam _Node   The address of the Node.
+     *  ILLUSTRATION:
+     *   Suppose a 2D domain with 5x3 root node below.
+     *       _____________________________    * The number inside bracket denote the
+     *      |[10] |[11] |[12] |[13] |[14] |      current node ID.
+     *      |_____|_____|_____|_____|_____|   * The ID move in x direction then y direction.
+     *      | [5] | [6] | [7] | [8] | [9] |   * The current illustration is the node 
+     *      |_____|_____|_____|_____|_____|      map in root level or level 0.
+     *      | [0] | [1] | [2] | [3] | [4] |   * The starting point is on minimum coordinate
+     *      |_____|_____|_____|_____|_____|      the left-bottom that start with ID = 0
+     * 
+     *   The node ID list in the next level.
+     *       _____________________________ 
+     *      |__|__|__|__|__|__|__|__|..|74|   * The starting ID at the next level start from
+     *      |__|__|__|__|__|__|__|__|__|__|      the last ID from the current level (15 = 14 + 1)
+     *      |..|__|__|__|__|__|__|__|__|__|   * The sequence of ID is similar to the previous level
+     *      |35|..|__|__|__|__|__|__|..|44|   * No matter the current node is existed or not
+     *      |25|26|..|__|__|__|__|__|..|34|      the node position will determine the ID
+     *      |15|16|17|..|__|__|__|__|..|24|   * PS: The ID number is left blank for clarity.
     */
     std::unordered_map<int, Node*> nodeMap;
+
     
     // GridNode element member
     double pivotCoor[DIM];  // The pivot position coordinate (left(x), bottom(y), front (z))

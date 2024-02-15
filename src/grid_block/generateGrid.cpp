@@ -722,6 +722,66 @@ void generateGrid::nodeGeneration(GridNode& nodeList, const std::vector<Body>& b
 }
 
 /**
+ *  @brief  Generate the data of node list for no body simulation.
+ *         
+ *  @param  nodeList The "GridNode" data for list of node to be constructed.
+*/
+void generateGrid::nodeGeneration(GridNode &nodeList){
+    /* PROCEDURE !!
+        1. Set up (update) the member of GridNode
+        2. Generate the root node list
+        3. Refine until the finest node
+    */
+
+    // PROCEDURE 1!
+    // ************
+    // Set up all of the GridNode parameter
+    MESSAGE_LOG << "Update grid node parameters\n";
+    this->updateGridNode(nodeList);
+    
+    // PROCEDURE 2!
+    // ************
+    // Generate the root node
+    MESSAGE_LOG << "Generating root node\n";
+    if (PROCEDURE_2_TYPE == 1){
+        // Generate the root node by recursive attempt
+        // The indexing is moving from pivot to z to y to x consecutively (recursive method)
+        int ID = 0;         // ID counter
+        int index[DIM];     // Position index
+        this->generateRootRec(nodeList, DIM, ID, index);
+    }
+    else if (PROCEDURE_2_TYPE == 2){
+        // Generate the root node in direct manner
+        this->generateRootDir(nodeList);
+    }
+    
+    // PROCEDURE 3!
+    // ************
+    // Refine the node until reaching the maximum level
+    
+    // Iterate from the ROOT level to one level before MAX_LEVEL
+    for(int currLvl = ROOT_LEVEL; currLvl < nodeList.maxLevel; currLvl++){
+        // Iterate through all node inside the current level
+        int beginID = nodeList.getPivID(currLvl);
+        int endID = nodeList.getPivID(currLvl+1);
+        for (int nodeID = beginID; nodeID < endID; nodeID++){
+            // Refine the current ID
+            // Check whether the current ID is a leaf Node
+            Node *&currNode = nodeList.nodeMap.at(nodeID);
+
+            // Container to store the child ID
+            std::vector<int> chdIDList;
+
+            // Perform the refinement
+            nodeList.refineNode(currNode, nodeList, chdIDList);
+        }
+        // Done current level
+    }
+
+    return;
+}
+
+/**
  *  @brief  Generate the data of node list based on particle data.
  *         
  *  @param  nodeList The "GridNode" data for list of node to be constructed.
@@ -879,5 +939,205 @@ void generateGrid::createNode(GridNode &_grid, Particle &_par){
         }
     }
 }
+
+
+/**
+ *  @brief  Assign the particle node ID into the corresponding leaf node. Also
+ *  map the evaluated particle into a map node.
+ *
+ *  @param  baseGrid The base node data for node ID evaluation.
+ *  @param  mapNode [OUTPUT] The particle ID map data consisted of leaf node only.
+ *  This container maps the nodeID to all ID of evalulated particle inside the node 
+ *  (or can be illustrated as : [nodeID]->{[parID]}).
+ *  @param  evalParticle [UPDATE] Particle data to set the node ID.
+*/
+void generateGrid::assignNodeID(const GridNode &nGrd, std::unordered_map<int, std::vector<int>> &nodeMap, Particle &par){
+    /** Procedure:
+     *  1. Evaluate the ROOT node ID containing each particle
+     *  2. Push down the node ID until it reaches the leaf node
+    */
+
+    // Intermediate variable
+    
+    // Particle size on root node
+    const double rootParSize = nGrd.gridSize / nGrd.baseParNum;
+
+    // Node container variable
+    std::vector<int> nodeList1, nodeList2;          // The temporary node ID container
+    std::vector<int> *currNodeList, *nextNodeList;  // The temporary alias of node ID container
+    std::unordered_map<int, bool> nodeFlag;         // The flag of the available node [Helper variable]
+
+    // // Particle parameter variable
+    // std::vector<bool> settleFlag(par.num, false);   // List of settle particle
+    // int unsettledNum = par.num;     // Number of unsettled particle
+
+    // PROCEDURE 1:
+    // ***********
+    // Determine the ID of the corresponding root node
+    par.nodeID.resize(par.num, 0);  // Reserve the node ID container
+    par.s.resize(par.num, 0);       // Reserve the particle size container
+    for (int parID = 0; parID < par.num; parID++){
+        // Retrieve the particle coordinate
+        double coord[DIM];
+        coord[0] = par.x[parID];
+        coord[1] = par.y[parID];
+        #if (DIM == 3 )
+        coord[2] = par.z[parID];
+        #endif
+
+        // Update the particle size
+        par.s[parID] = rootParSize;
+
+        // Get the root ID
+        int _nodeID = nGrd.pos2ID(coord, ROOT_LEVEL);
+        par.nodeID[parID] = _nodeID;
+
+        // Update the temporary container
+        if (nodeFlag.count(_nodeID) == 0){
+            nodeList1.push_back(_nodeID);
+            nodeFlag.insert({_nodeID, true});
+        }
+        
+        // Update the nodeID to parID map container data
+        nodeMap[_nodeID].push_back(parID);
+    }
+
+    // PROCEDURE 2:
+    // ***********
+    // Iteratively evaluate leaf and downpass to child for non leaf node
+    
+    // Set the level evaluation
+    int level;
+
+    // Start iteration
+    for (level = 0; level < Pars::max_level; level++){
+        // Create aliasing for the node list
+        if (level % 2 == 0){
+            // Even level
+            currNodeList = &nodeList1;
+            nextNodeList = &nodeList2;
+        }else{
+            // Odd Level
+            currNodeList = &nodeList2;
+            nextNodeList = &nodeList1;
+        }
+
+        // Set up the necessary container
+        nodeFlag.clear();
+        nextNodeList->clear();
+
+        // Calculate the particle size on the child node
+        const double chdParSize = rootParSize / Pars::intPow(2, level+1);
+
+        // Check each node in the current list
+        for (const int &nodeID : *currNodeList){
+            // // Check the current node is not a leaf
+            // if(nGrd.nodeMap.at(nodeID)->isLeaf == true){
+            //     // Set the particle size
+            //     double _nodeSize = nGrd.gridSize / Pars::intPow(2,level);
+            //     double _parSize = _nodeSize / nGrd.baseParNum;
+
+            //     // Alias to the particle list
+            //     std::vector<int> &parList = nodeMap.at(nodeID);
+                
+            //     // Update the particle size
+            //     for (const int &parID : parList){
+            //         par.s[parID] = _parSize;
+            //     }
+            // }
+            
+            // Check the current node is not a leaf
+            if (nGrd.nodeMap.at(nodeID)->isLeaf != true){
+                // Distribute the particle into the correspond child (if current node is NOT a leaf)
+
+                // Internal container
+                std::vector<int> &parList = nodeMap.at(nodeID);         // List of all particle in the current node
+                std::vector<int> chdIDList = nGrd.findChild(nodeID);    // List of all child node ID of the current node
+
+                // Coordinate container
+                double nodeCoord[DIM];  // Node mid point coordinate
+                double coord[DIM];      // Particle coordinate
+
+                // Retrieve the middle coordinate of current node
+                const Node &_node = *(nGrd.nodeMap.at(nodeID));
+                basis_loop(d) nodeCoord[d] = _node.pivCoor[d] + (0.5 * _node.length);
+                
+                // Evaluate all particle in the current node
+                for (const int &parID : parList){
+                    // Retrieve the particle coordinate
+                    coord[0] = par.x[parID];
+                    coord[1] = par.y[parID];
+                    #if (DIM == 3 )
+                    coord[2] = par.z[parID];
+                    #endif
+
+                    /** Illustration of LID (local ID) numbering
+                     *   2D space       y                                    *  Comparing value in the binary means!
+                     *   _________     |                                     *  -----------------------------------
+                     *  | 2  | 3  |    |____ x                               *    2D space only have 2 basis x,y
+                     *  |____|____|                    Back Block            *    it can be translated to 2 digit binary
+                     *  | 0  | 1  |    3D space      ___________________     *     For clarity, apply the LID number in 2D space
+                     *  |____|____|                /:        /:        /|    *     0 -> 00 : x left to center  | y below center
+                     *                            /_:______ /_:______ / |    *     1 -> 01 : x right to center | y below center
+                     *       Front Block         |  :  2   |  :  3   |  |    *     2 -> 10 : x left to center  | y above center
+                     *      ___________________  |  :......|..:......|..|    *     3 -> 11 : x right to center | y above center
+                     *    /:        /:        /| | ,:      | ,:      | /|    *          ^^
+                     *   /_:______ /_:______ / | |,_:______|,_:______|/ |    *       y--||--x
+                     *  |  :  6   |  :  7   |  | |  :  0   |  :  1   |  |    *  
+                     *  |  :......|..:......|..| |  :......|..:......|..|    *  The first digit (rightmost digit) represents
+                     *  | ,:      | ,:      | /| | ,       | ,       | /     *   the relative x location of child toward parent node center, 
+                     *  |,_:______|,_:______|/ | |,________|,________|/      *   otherwise the second digit represent the relative y location.
+                     *  |  :  4   |  :  5   |  |        y                    *  
+                     *  |  :......|..:......|..|       |                     *  The translation value between child relative position
+                     *  | ,       | ,       | /        |____ x               *   and the LID value is used to determine the child node ID
+                     *  |,________|,________|/        /                      *  
+                     *                             z /                       *  This idea works fine for the extension to 3D!  
+                    */
+                    int LID = 0;    // The local ID position of child location [initialized by 0]
+
+                    // Determine the child local position [quad (2D) or octant (3D)] by
+                    // comparing the particle coordinate toward current node mid point
+                    basis_loop(d){
+                        LID |= ((coord[d] > nodeCoord[d] ? 1 : 0) << d);
+                        // NOTE:
+                        // > Use the binary left shift (<<) to set the digit location
+                        // > Use the binary or operator to overwrite binary value to LID
+                    }
+
+                    // Update the particle size
+                    par.s[parID] = chdParSize;
+
+                    // Get the new ID
+                    int newNodeID = chdIDList[LID];     // The new node ID
+                    par.nodeID[parID] = newNodeID;      // Update the node ID of current particle
+
+                    // Update the temporary container
+                    if (nodeFlag.count(newNodeID) == 0){
+                        nextNodeList->push_back(newNodeID);
+                    }
+                    nodeFlag.insert({newNodeID, true});
+
+                    // Update the nodeID to parID map container data
+                    nodeMap[newNodeID].push_back(parID);
+                }
+
+                // Release the container at current node
+                nodeMap.erase(nodeID);
+                nodeFlag.erase(nodeID);
+            }
+        }
+    }
+
+    /** Procedure:
+     *  1. Put all particle into the corresponding root node (also take the other one)
+     *     -> For leaf node     : Keep as settled particle
+     *     -> For non leaf node : Transfer to the corresponding child
+     *  2. Do the first and second check
+     *  3. Done when the level reach max (automatically a leaf node)
+    */
+
+    return;
+}
+
 // #pragma endregion
 

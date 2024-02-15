@@ -19,14 +19,17 @@
 class save_data
 {
 	// Private data
-	std::string sumLogDir = "output/Parameter.dat";
+	const std::string sumLogDir = Pars::opt_start_state == 0 ?
+	"output/Parameter_initial.dat" : "output/Parameter_resume.dat";
 
 	void save_par_state_2D(const Particle &_particle, std::string _name, int _type);
 	void save_par_state_3D(const Particle &_particle, std::string _name, int _type);
+	void save_par_state_init_vor(const Particle &_particle, std::string _name, int _type);
 
 public:
 	// Basic saving data state
 
+	void save_par_interpolation(const Particle &_particle, std::string _name);
 	void save_par_state(const Particle &_particle, std::string _name, int _type);
 	void save_body_state(const Body &_body, std::string _name, int _type);
 	void save_grid_node_state(const GridNode &_gridNode, std::string _name, int _type);

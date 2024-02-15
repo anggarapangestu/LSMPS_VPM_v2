@@ -175,4 +175,3 @@ void remeshing::set_neighbor(Particle &_par, const GridNode &_gridNode){
 	
 	printf("+-------------------------------------------------+\n");
 }
-

@@ -1,11 +1,17 @@
 #include "force_calc.hpp"
 
+/** The differential order used in calculating force using vorticity moment integral
+ *   1:= The differential order of 1
+ *   2:= The differential order of 2
+*/
+#define VORTICITY_MOMENT_DIFF_ORDER 2
+
 // =====================================================
 // +----------------- Utility Function ----------------+
 // =====================================================
 
 double force_calculation::FD_diff1(const double h, const std::vector<double> &f, int order){
-	double diff;
+	double diff = 0.0;
 	if (order == 1){
 		diff = 1 / h * (-f[0] + f[1]);
 	}else if (order == 2){
@@ -33,16 +39,17 @@ void force_calculation::force_calc(const Particle& par,
 								   const std::vector<Body> &_bodyList, 
 								   int _step, int _type, std::string name)
 {
-	// The list of force calculation type
-	Pars::opt_force_type;
-
-	// Exception 1
+	// Exception 1 (No force is calculated)
 	if (_type == 0) return;
-	// Exception 2
+
+	// Exception 2 (No body for force calculation)
 	if (N_BODY == 0) return;
 
 	// Log prompt
 	std::cout << "\nSaving force data ...\n";
+
+    // Assign the step time
+    this->iter = _step;
 
 	// Computation timer
 	#if (TIMER_PAR == 0)
@@ -53,29 +60,24 @@ void force_calculation::force_calc(const Particle& par,
         double _time = omp_get_wtime();
     #endif
 
-
-    // Assign the step time
-    this->iter = _step;
-    // Change the initial condition
-    if ((Pars::opt_start_state == 0 && (_step == 0)) ||
-		(Pars::opt_start_state == 1 && (_step == Pars::resume_step)))
-	{
-		this->init = true;
-	}
+	// // Change the initial condition (<!> No need to be changed <!>)
+	// if (Pars::opt_start_state == 1) this->init = false;		// Continue from the previous data
 
     // Saving the force data according to the user choice type
 	switch (_type){
 	case 1:
-		printf("%s<+> Direct Calculation Force%s\n", FONT_CYAN, FONT_RESET);
-        this->direct_force(par, _bodyList[0]);	// Still not working
+		printf("%s<+> Direct Force Calculation%s\n", FONT_CYAN, FONT_RESET);
+		for (int part = 0; part < N_BODY; part++)
+			this->direct_force(par, _bodyList[part], part);
 		break;
 	case 2:
 		printf("%s<+> Penalization Based Force%s\n", FONT_CYAN, FONT_RESET);
         this->pen_force(par, _bodyList, name);
 		break;
 	case 3:
-		printf("%s<+> Linear Impulse Based Force%s\n", FONT_CYAN, FONT_RESET);
-        // this->Force2(_step,1,2,3,4,1,2,par);
+		// This method is not working (It should be worked as in theory, but why <?>)
+		printf("%s<+> Vorticity Moment Integral Based Force%s\n", FONT_CYAN, FONT_RESET);
+		this->int_vor_force(par, _bodyList, name);
 		break;
 	case 4:
 		printf("%s<+> NOCA Impulse Based Force%s\n", FONT_CYAN, FONT_RESET);
@@ -140,10 +142,10 @@ void force_calculation::force_calc(const Particle& par,
 
 
 // =====================================================
-// +------------ Force Calculation Manager ------------+
+// +------------ Force Calculation Method -------------+
 // =====================================================
 // Direct force calculation
-void force_calculation::direct_force(const Particle& par, const Body& body){
+void force_calculation::direct_force(const Particle& par, const Body& body, int bodyPart){
     // Start the simulation
 	/* Procedure
 	   [1] Calculate the pressure at each panel node
@@ -342,9 +344,11 @@ void force_calculation::direct_force(const Particle& par, const Body& body){
 
     // =========== DATA SAVING ===========
 	std::ofstream ofs;
-    // Save header
+	std::string fileName = "output/force_direct_body_" + std::to_string(bodyPart+1) + ".csv";
+    
+	// Save header
 	if (this->init == true){
-		ofs.open("output/force_data_direct.csv");
+		ofs.open(fileName.c_str());
 		ofs << "time_dir" << "," 
             << "Fx" << "," << "Fy" << "," << "M"  << "," 
             << "Cx" << "," << "Cy" << "," << "Cm" << "\n";
@@ -353,7 +357,7 @@ void force_calculation::direct_force(const Particle& par, const Body& body){
 	}
 
     // Save data
-	ofs.open("output/force_data_direct.csv", std::ofstream::out | std::ofstream::app);
+	ofs.open(fileName.c_str(), std::ofstream::out | std::ofstream::app);
 	ofs << this->iter * Pars::dt << "," 
         << Drag << "," << Lift << "," << Mom << "," 
         << Cd   << "," << Cl   << "," << Cm  << "\n";
@@ -378,18 +382,29 @@ void force_calculation::pen_force(const Particle& p, const std::vector<Body> &_b
     // Temporary force calculation
 	double fx, fy, fz;
 
+	// The dynamic pressure
+	double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf;
+
+	// The length or area reference <!> Need modification later on <!> 
+	double Lref = Pars::Df;							// The reference length for 2D object
+	double Aref = M_PI * Pars::Df * Pars::Df / 4;	// The reference area for 3D object (adjusting the shape) [Currently only suitable for sphere]
+
 	// Body velocity <!> Need modification later on <!> 
 	double uS = Pars::ubody;
 	double vS = Pars::vbody;
 	double wS = Pars::wbody;
 
+	// Remember the equation for force 
+	//   F = (1/2 * rho * U^2) * Cd * A_ref
+	// The equation of force penalization
+	//   F = -rho * integral over domain(lambda * chi * (Us - U) * dA)
+	//      or
+	//   F = -ρ \int{ λχ(Us-U)dA }
+
 	// [PROCEDURE 1] : Calculate the force data
     // *************
 	// Calculation of the data force
 	#if (DIM == 2)
-		// The dynamic pressure
-		double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf * Pars::Df;
-		
 		// =========== Data calculation ===========
 		for (int i = 0; i < p.num; i++){
 			// Body part
@@ -433,22 +448,25 @@ void force_calculation::pen_force(const Particle& p, const std::vector<Body> &_b
 				this->init = false;
 			}
 
+			/** NOTE: The reference length must be modified for next calculation
+			 *  > The drag regard of y length (thickness)
+			 *  > The lift regard of x length
+			 *  > But for cylinder (also square) has same x and y length
+			*/
+
 			// Data input
 			ofs.open(name.c_str(), std::ofstream::out | std::ofstream::app);
 			ofs << this->iter * Pars::dt 
 				<< "," << Fx[part] 
 				<< "," << Fy[part] 
 				<< "," << Mz[part] 
-				<< "," << Fx[part] / Cq				// Aerodynamic force coefficient in x
-				<< "," << Fy[part] / Cq				// Aerodynamic force coefficient in y
-				<< "," << Mz[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in z
+				<< "," << Fx[part] / (Cq*Lref)			// Aerodynamic force coefficient in x
+				<< "," << Fy[part] / (Cq*Lref)			// Aerodynamic force coefficient in y
+				<< "," << Mz[part] / (Cq*Lref*Lref)		// Aerodynamic moment coefficient in z
 				<< "\n";
 			ofs.close();
 		}
 	#elif (DIM == 3)
-		// The dynamic pressure
-		double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf;
-		
 		// =========== Data calculation ===========
 		for (int i = 0; i < p.num; i++){
 			// Body part
@@ -506,12 +524,12 @@ void force_calculation::pen_force(const Particle& p, const std::vector<Body> &_b
 			// Data input
 			ofs.open(name.c_str(), std::ofstream::out | std::ofstream::app);
 			ofs << this->iter * Pars::dt 
-				<< "," << Fx[part] / Cq				// Aerodynamic force coefficient in x
-				<< "," << Fy[part] / Cq				// Aerodynamic force coefficient in y
-				<< "," << Fz[part] / Cq				// Aerodynamic force coefficient in z
-				<< "," << Mx[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in x
-				<< "," << My[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in y
-				<< "," << Mz[part] / (Cq*Pars::Df)	// Aerodynamic moment coefficient in z
+				<< "," << Fx[part] / (Cq*Aref)		// Aerodynamic force coefficient in x
+				<< "," << Fy[part] / (Cq*Aref)		// Aerodynamic force coefficient in y
+				<< "," << Fz[part] / (Cq*Aref)		// Aerodynamic force coefficient in z
+				<< "," << Mx[part] / (Cq*Aref*Lref)	// Aerodynamic moment coefficient in x
+				<< "," << My[part] / (Cq*Aref*Lref)	// Aerodynamic moment coefficient in y
+				<< "," << Mz[part] / (Cq*Aref*Lref)	// Aerodynamic moment coefficient in z
 				<< "\n";
 			ofs.close();
 		}
@@ -520,134 +538,365 @@ void force_calculation::pen_force(const Particle& p, const std::vector<Body> &_b
 	return;
 }
 
-// // Penalization force calculation [OLD METHOD]
-// void force_calculation::pen_force(const Particle& par, const Body& body){
-// 	// [PROCEDURE 0] : Define the particle data near solid body
-//     // *************
-//     Particle p;
-//     p.num = 0;
-//     for (int i = 0; i < par.num; i++){
-//         // if(par.isNearBody[i] == true)
-// 		// if((par.x[i] > body.min_pos[0] - 20*Pars::sigma) && (par.x[i] < body.max_pos[0] + 20*Pars::sigma) &&
-//         //    (par.y[i] > body.min_pos[1] - 20*Pars::sigma) && (par.y[i] < body.max_pos[1] + 20*Pars::sigma))
-// 		if(par.bodyPart[i] != -1)
-// 		{
-//             p.x.push_back(par.x[i]);
-//             p.y.push_back(par.y[i]);
-//             p.s.push_back(par.s[i]);
-//             p.chi.push_back(par.chi[i]);
-//             p.u.push_back(par.u[i]);
-//             p.v.push_back(par.v[i]);
-//             p.num++;
-//         }
-//     }
+/*	// Penalization force calculation [OLD METHOD]
+void force_calculation::pen_force(const Particle& par, const Body& body){
+	// [PROCEDURE 0] : Define the particle data near solid body
+    // *************
+    Particle p;
+    p.num = 0;
+    for (int i = 0; i < par.num; i++){
+        // if(par.isNearBody[i] == true)
+		// if((par.x[i] > body.min_pos[0] - 20*Pars::sigma) && (par.x[i] < body.max_pos[0] + 20*Pars::sigma) &&
+        //    (par.y[i] > body.min_pos[1] - 20*Pars::sigma) && (par.y[i] < body.max_pos[1] + 20*Pars::sigma))
+		if(par.bodyPart[i] != -1)
+		{
+            p.x.push_back(par.x[i]);
+            p.y.push_back(par.y[i]);
+            p.s.push_back(par.s[i]);
+            p.chi.push_back(par.chi[i]);
+            p.u.push_back(par.u[i]);
+            p.v.push_back(par.v[i]);
+            p.num++;
+        }
+    }
 
-//     // [PROCEDURE 1] : Calculate the force data
-//     // *************
-//     // Internal variables
-//     double fx, fy, F_x, F_y, Mom, Cx, Cy, Cm;	// Temporary force calculation
+    // [PROCEDURE 1] : Calculate the force data
+    // *************
+    // Internal variables
+    double fx, fy, F_x, F_y, Mom, Cx, Cy, Cm;	// Temporary force calculation
 	
-//     double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf * Pars::Df;
-// 	fx = 0.0e0;
-// 	fy = 0.0e0;
-// 	F_x = 0.0e0;
-// 	F_y = 0.0e0;
-// 	Mom = 0.0e0;
+    double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf * Pars::Df;
+	fx = 0.0e0;
+	fy = 0.0e0;
+	F_x = 0.0e0;
+	F_y = 0.0e0;
+	Mom = 0.0e0;
 
-// 	std::vector<double> uSi = p.u; 	// Need modification later on
-// 	std::vector<double> vSi = p.v; 	// Need modification later on
+	std::vector<double> uSi = p.u; 	// Need modification later on
+	std::vector<double> vSi = p.v; 	// Need modification later on
 
-// 	for (int i = 0; i < p.num; i++){ 	// Must be deleted after modification later
-// 		uSi[i] = 0.0;
-// 		vSi[i] = 0.0;
-// 	}
+	for (int i = 0; i < p.num; i++){ 	// Must be deleted after modification later
+		uSi[i] = 0.0;
+		vSi[i] = 0.0;
+	}
 
-// 	// Calculation of the data force
-// 	// Non Iterative Penalization
-//     if(Pars::opt_pen_iter == 1)
-// 	{
-// 		for (int i = 0; i < p.num; i++)
-// 		{
-// 			// Force calculation
-//             // if (Pars::opt_pen == 1 || Pars::opt_pen == 2){  // Implicit
-// 				fx = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.u[i] + uSi[i]) * std::pow(p.s[i], 2);
-// 				fy = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.v[i] + vSi[i]) * std::pow(p.s[i], 2);
-// 				F_x += fx;
-// 				F_y += fy;
-// 			// }else if (Pars::opt_pen == 3){                  // Explicit
-// 			// 	fx = -Pars::RHO * p.chi[i] * ((-p.u[i] + uSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
-// 			// 	fy = -Pars::RHO * p.chi[i] * ((-p.v[i] + vSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
-// 			// 	F_x += fx;
-// 			// 	F_y += fy;
-// 			// }
+	// Calculation of the data force
+	// Non Iterative Penalization
+    if(Pars::opt_pen_iter == 1)
+	{
+		for (int i = 0; i < p.num; i++)
+		{
+			// Force calculation
+            // if (Pars::opt_pen == 1 || Pars::opt_pen == 2){  // Implicit
+				fx = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.u[i] + uSi[i]) * std::pow(p.s[i], 2);
+				fy = -Pars::RHO * Pars::lambda * p.chi[i] * (-p.v[i] + vSi[i]) * std::pow(p.s[i], 2);
+				F_x += fx;
+				F_y += fy;
+			// }else if (Pars::opt_pen == 3){                  // Explicit
+			// 	fx = -Pars::RHO * p.chi[i] * ((-p.u[i] + uSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
+			// 	fy = -Pars::RHO * p.chi[i] * ((-p.v[i] + vSi[i]) / Pars::dt) * std::pow(p.s[i], 2);
+			// 	F_x += fx;
+			// 	F_y += fy;
+			// }
 
-// 			// Moment calculation
-// 			if(fy > 1.0e-12){
-// 				Mom += (fy * (Pars::xcenter - p.x[i])) ;
-// 			}
-// 			if(fx > 1.0e-12){
-// 				Mom += (fx * -(Pars::ycenter - p.y[i]));
-// 			}
-// 		}
+			// Moment calculation
+			if(fy > 1.0e-12){
+				Mom += (fy * (Pars::xcenter - p.x[i])) ;
+			}
+			if(fx > 1.0e-12){
+				Mom += (fx * -(Pars::ycenter - p.y[i]));
+			}
+		}
 
-// 		// //Untuk EOM vibration
-// 		// Pars::gaya = F_y;
-// 		// Pars::momen = Mom;
+		// //Untuk EOM vibration
+		// Pars::gaya = F_y;
+		// Pars::momen = Mom;
 
-// 		// Coefficient of Forces
-// 		Cx = F_x / Cq;
-// 		Cy = F_y / Cq;
-// 		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
-// 	}
-//     // Iterative Penalization [Not Finished]
-// 	if (Pars::opt_pen_iter == 2){
-// 		for (int i = 0; i < p.num; i++)
-// 		{
-// 			// Fluid to solid "+", alpha == 2
-// 			//fx = -Pars::RHO * 2 * p.chi[i] * ((-p.u[i] + uSi[i])/Pars::dt) * std::pow(p.s[i], 2) ;
-// 			//fy = -Pars::RHO * 2 * p.chi[i] * ((-p.v[i] + vSi[i])/Pars::dt)  * std::pow(p.s[i], 2) ;
-// 			fx = -Pars::RHO * p.u[i] * std::pow(p.s[i], 2) ;
-// 			fy = -Pars::RHO * p.v[i] * std::pow(p.s[i], 2) ;
-// 			F_x += fx; // ! should be changed for multiresolution
-// 			F_y += fy; // ! should be changed for multiresolution
+		// Coefficient of Forces
+		Cx = F_x / Cq;
+		Cy = F_y / Cq;
+		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
+	}
+    // Iterative Penalization [Not Finished]
+	if (Pars::opt_pen_iter == 2){
+		for (int i = 0; i < p.num; i++)
+		{
+			// Fluid to solid "+", alpha == 2
+			//fx = -Pars::RHO * 2 * p.chi[i] * ((-p.u[i] + uSi[i])/Pars::dt) * std::pow(p.s[i], 2) ;
+			//fy = -Pars::RHO * 2 * p.chi[i] * ((-p.v[i] + vSi[i])/Pars::dt)  * std::pow(p.s[i], 2) ;
+			fx = -Pars::RHO * p.u[i] * std::pow(p.s[i], 2) ;
+			fy = -Pars::RHO * p.v[i] * std::pow(p.s[i], 2) ;
+			F_x += fx; // ! should be changed for multiresolution
+			F_y += fy; // ! should be changed for multiresolution
 		
-// 			// Hitung Moment.
-// 			if(fy > 1.0e-12){
-// 				Mom += (fy * (Pars::xcenter - p.x[i]));
-// 			}
-// 			if(fx > 1.0e-12){
-// 				Mom +=  (fx * -(Pars::ycenter - p.y[i]));
-// 			}
-// 		}
+			// Hitung Moment.
+			if(fy > 1.0e-12){
+				Mom += (fy * (Pars::xcenter - p.x[i]));
+			}
+			if(fx > 1.0e-12){
+				Mom +=  (fx * -(Pars::ycenter - p.y[i]));
+			}
+		}
 
-// 		// Coefficient of Forces
-// 		Cx = F_x / Cq;
-// 		Cy = F_y / Cq;
-// 		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
-// 	}
+		// Coefficient of Forces
+		Cx = F_x / Cq;
+		Cy = F_y / Cq;
+		Cm = Mom / Cq / Pars::Df; // For airfoil change the chord to be lx
+	}
 
-// 	// =========== DATA SAVING ===========
-// 	std::ofstream ofs;
-//     // Data header
-// 	if (this->init == true){
-// 		ofs.open("output/force_data_penalization.csv");
-// 		ofs << "time_pen" << "," 
-//             << "Fx" << "," << "Fy" << "," << "M"  << "," 
-//             << "Cx" << "," << "Cy" << "," << "Cm" <<"\n";
-// 		ofs.close();
-//         this->init = false;
-// 	}
+	// =========== DATA SAVING ===========
+	std::ofstream ofs;
+    // Data header
+	if (this->init == true){
+		ofs.open("output/force_data_penalization.csv");
+		ofs << "time_pen" << "," 
+            << "Fx" << "," << "Fy" << "," << "M"  << "," 
+            << "Cx" << "," << "Cy" << "," << "Cm" <<"\n";
+		ofs.close();
+        this->init = false;
+	}
 
-// 	// Data input
-//     ofs.open("output/force_data_penalization.csv", std::ofstream::out | std::ofstream::app);
-// 	ofs << this->iter * Pars::dt << "," 
-//         << F_x << "," << F_y << "," << Mom << "," 
-//         << Cx  << "," << Cy  << "," << Cm  << "\n";
-// 	ofs.close();
-// }
+	// Data input
+    ofs.open("output/force_data_penalization.csv", std::ofstream::out | std::ofstream::app);
+	ofs << this->iter * Pars::dt << "," 
+        << F_x << "," << F_y << "," << Mom << "," 
+        << Cx  << "," << Cy  << "," << Cm  << "\n";
+	ofs.close();
+}
+*/
 
-// Impulse Force Calculation
+// Integral of vorticity moment force calculation
+void force_calculation::int_vor_force(const Particle& p, const std::vector<Body> &_bodyList, std::string headName){
+	// Remember the equation for force 
+	//   F = (1/2 * rho * U^2) * Cd * A_ref
+	// The equation of force integral vorticity moment
+	//   F = -rho * d/dt{ integral over domain(((x-x_cen) cross vorticity) * dA) }
+	//      or
+	//   F = -ρ d/dt{ \int{ (x-x_c)x ω dA } } -> 2D: Force per width [N/m], 3D: Force [N]
+	
+	//  Cross product of (I = r x ω)
+	//   [Ix]   [x]   [ωx]   [y*ωz - z*ωy]   [ y*ωz]
+	//   [Iy] = [y] x [ωy] = [z*ωx - x*ωz] = [-x*ωz]
+	//   [Iz]   [z]   [ωz]   [x*ωy - y*ωx]   [  0  ]
+	//                            3D           2D
+
+	// [PROCEDURE 0] : Data container initialization
+    // *************
+    // Internal variables (Store the data for each body)
+	std::vector<double> Fx(N_BODY, 0.0);		// The force in X direction
+	std::vector<double> Fy(N_BODY, 0.0);		// The force in Y direction
+	std::vector<double> Fz(N_BODY, 0.0);		// The force in Z direction
+	double dx, dy, dz;				// Temporary distance variable
+	double _IxdA, _IydA, _IzdA;		// Temporary moment element calculation
+	double Cq = 0.5 * Pars::RHO * Pars::U_inf * Pars::U_inf;	// The dynamic pressure
+	// The length or area reference <!> Need modification later on <!> 
+	double Lref = Pars::Df;							// The reference length for 2D object
+	double Aref = M_PI * Pars::Df * Pars::Df / 4;	// The reference area for 3D object (adjusting the shape) [Currently only suitable for sphere]
+
+	// Reserve the moment data container (both for 2D and 3D)
+	if (this->init == true){
+		this->Ivortx = std::vector<std::vector<double>>(N_BODY, std::vector<double>(VORTICITY_MOMENT_DIFF_ORDER+1, 0.0));
+		this->Ivorty = std::vector<std::vector<double>>(N_BODY, std::vector<double>(VORTICITY_MOMENT_DIFF_ORDER+1, 0.0));;
+		this->Ivortz = std::vector<std::vector<double>>(N_BODY, std::vector<double>(VORTICITY_MOMENT_DIFF_ORDER+1, 0.0));;
+	}
+	
+	// Rearrange the moment container (1 -> 0, and 2 -> 1)
+	for (int part = 0; part < N_BODY; part++){
+		this->Ivortx[part][0] = this->Ivortx[part][1];
+		this->Ivorty[part][0] = this->Ivorty[part][1];
+		this->Ivortz[part][0] = this->Ivortz[part][1];
+	}
+	#if (VORTICITY_MOMENT_DIFF_ORDER == 2)
+		for (int part = 0; part < N_BODY; part++){
+			this->Ivortx[part][1] = this->Ivortx[part][2];
+			this->Ivorty[part][1] = this->Ivorty[part][2];
+			this->Ivortz[part][1] = this->Ivortz[part][2];
+		}
+	#endif
+
+	// [PROCEDURE 1] : Calculate the force data
+    // *************
+	// Calculation of the data force
+	#if (DIM == 2)
+		// =========== Vorticity Moment Calculation ===========
+		for (int i = 0; i < p.num; i++){
+			// Only calculate the active particle
+			if (p.isActive[i] == false) continue;
+
+			// Evaluate for each body
+			for (int part = 0; part < N_BODY; part++){
+				// Intermediate variable
+				const double _A = p.s[i] * p.s[i];          // The area occupied by current particle
+
+				// Calculate the distance from body center
+				dx = p.x[i] - _bodyList[part].cen_pos[0];   // The x distance from body center
+				dy = p.y[i] - _bodyList[part].cen_pos[1];   // The y distance from body center
+
+				// Calculate the force caused by current particle [Penalization method]
+				_IxdA =  dy * p.vorticity[i] * _A;
+				_IydA = -dx * p.vorticity[i] * _A;
+
+				// Assign to the moment container
+				#if (VORTICITY_MOMENT_DIFF_ORDER == 1)
+					this->Ivortx[part][1] += _IxdA;
+					this->Ivorty[part][1] += _IydA;
+				#elif (VORTICITY_MOMENT_DIFF_ORDER == 2)
+					this->Ivortx[part][2] += _IxdA;
+					this->Ivorty[part][2] += _IydA;
+				#endif
+			}
+		}
+		
+		// =========== Force Data Calculation ===========
+		if (this->iter < VORTICITY_MOMENT_DIFF_ORDER){
+			for (int part = 0; part < N_BODY; part++){
+				Fx[part] = 0;
+				Fy[part] = 0;
+			}
+		}else{
+			// Assign to the moment container
+			#if (VORTICITY_MOMENT_DIFF_ORDER == 1)
+				for (int part = 0; part < N_BODY; part++){
+					Fx[part] = -Pars::RHO * (this->Ivortx[part][1] - this->Ivortx[part][0]) / (Pars::dt);
+					Fy[part] = -Pars::RHO * (this->Ivorty[part][1] - this->Ivorty[part][0]) / (Pars::dt);
+				}
+			#elif (VORTICITY_MOMENT_DIFF_ORDER == 2)
+				for (int part = 0; part < N_BODY; part++){
+					Fx[part] = -Pars::RHO * (this->Ivortx[part][2] - this->Ivortx[part][0]) / (2*Pars::dt);
+					Fy[part] = -Pars::RHO * (this->Ivorty[part][2] - this->Ivorty[part][0]) / (2*Pars::dt);
+				}
+			#endif	
+		}
+		
+		// =========== Data Saving ===========
+		std::ofstream ofs;
+		for (int part = 0; part < N_BODY; part++){
+			// Filename format
+			std::string name = "output/" + headName + "_force_mom_body_" + std::to_string(part+1) + ".csv";
+			
+			// Data header
+			if (this->init == true){
+				ofs.open(name.c_str());
+				ofs << "time" 
+					<< "," << "Fx" << "," << "Fy"
+					<< "," << "Cx" << "," << "Cy"
+					<< "\n";
+				ofs.close();
+				this->init = false;
+			}
+
+			/** NOTE: The reference length must be modified for next calculation
+			 *  > The drag regard of y length (thickness)
+			 *  > The lift regard of x length
+			 *  > But for cylinder (also square) has same x and y length
+			*/
+
+			// Data input
+			ofs.open(name.c_str(), std::ofstream::out | std::ofstream::app);
+			ofs << this->iter * Pars::dt 
+				<< "," << Fx[part] 
+				<< "," << Fy[part] 
+				<< "," << Fx[part] / (Cq*Lref)	// Aerodynamic force coefficient in x
+				<< "," << Fy[part] / (Cq*Lref)	// Aerodynamic force coefficient in y
+				<< "\n";
+			ofs.close();
+		}
+	#elif (DIM == 3)
+		// =========== Vorticity Moment Calculation ===========
+		for (int i = 0; i < p.num; i++){
+			// Only calculate the active particle
+			if (p.isActive[i] == false) continue;
+
+			// Evaluate for each body
+			for (int part = 0; part < N_BODY; part++){
+				// Intermediate variable
+				const double _V = p.s[i] * p.s[i] * p.s[i]; // The volume occupied by current particle
+
+				// Calculate the distance from body center
+				dx = p.x[i] - _bodyList[part].cen_pos[0];   // The x distance from body center
+				dy = p.y[i] - _bodyList[part].cen_pos[1];   // The y distance from body center
+				dz = p.z[i] - _bodyList[part].cen_pos[2];   // The z distance from body center
+
+				// Calculate the force caused by current particle [Penalization method]
+				_IxdA = (dy*p.vortz[i] - dz*p.vorty[i]) * _V;
+				_IydA = (dz*p.vortx[i] - dx*p.vortz[i]) * _V;
+				_IzdA = (dx*p.vorty[i] - dy*p.vortx[i]) * _V;
+
+				// Assign to the moment container
+				#if (VORTICITY_MOMENT_DIFF_ORDER == 1)
+					this->Ivortx[part][1] += _IxdA;
+					this->Ivorty[part][1] += _IydA;
+					this->Ivortz[part][1] += _IzdA;
+				#elif (VORTICITY_MOMENT_DIFF_ORDER == 2)
+					this->Ivortx[part][2] += _IxdA;
+					this->Ivorty[part][2] += _IydA;
+					this->Ivortz[part][2] += _IzdA;
+				#endif
+			}
+		}
+		
+		// =========== Force Data Calculation ===========
+		if (this->iter < VORTICITY_MOMENT_DIFF_ORDER){
+			for (int part = 0; part < N_BODY; part++){
+				Fx[part] = 0;
+				Fy[part] = 0;
+				Fz[part] = 0;
+			}
+		}else{
+			// Assign to the moment container
+			#if (VORTICITY_MOMENT_DIFF_ORDER == 1)
+				for (int part = 0; part < N_BODY; part++){
+					Fx[part] = -Pars::RHO * (this->Ivortx[part][1] - this->Ivortx[part][0]) / (Pars::dt);
+					Fy[part] = -Pars::RHO * (this->Ivorty[part][1] - this->Ivorty[part][0]) / (Pars::dt);
+					Fz[part] = -Pars::RHO * (this->Ivortz[part][1] - this->Ivortz[part][0]) / (Pars::dt);
+				}
+			#elif (VORTICITY_MOMENT_DIFF_ORDER == 2)
+				for (int part = 0; part < N_BODY; part++){
+					Fx[part] = -Pars::RHO * (this->Ivortx[part][2] - this->Ivortx[part][0]) / (2*Pars::dt);
+					Fy[part] = -Pars::RHO * (this->Ivorty[part][2] - this->Ivorty[part][0]) / (2*Pars::dt);
+					Fz[part] = -Pars::RHO * (this->Ivortz[part][2] - this->Ivortz[part][0]) / (2*Pars::dt);
+				}
+			#endif	
+		}
+		
+		// =========== Data Saving ===========
+		std::ofstream ofs;
+		for (int part = 0; part < N_BODY; part++){
+			// Filename format
+			std::string name = "output/" + headName + "_force_mom_body_" + std::to_string(part+1) + ".csv";
+			
+			// Data header
+			if (this->init == true){
+				ofs.open(name.c_str());
+				ofs << "time" 
+					<< "," << "Fx" << "," << "Fy" << "," << "Fz"
+					<< "," << "Cx" << "," << "Cy" << "," << "Cz"
+					<< "\n";
+				ofs.close();
+				this->init = false;
+			}
+
+			// Data input
+			ofs.open(name.c_str(), std::ofstream::out | std::ofstream::app);
+			ofs << this->iter * Pars::dt 
+				<< "," << Fx[part] 
+				<< "," << Fy[part] 
+				<< "," << Fz[part] 
+				<< "," << Fx[part] / (Cq*Aref)	// Aerodynamic force coefficient in x
+				<< "," << Fy[part] / (Cq*Aref)	// Aerodynamic force coefficient in y
+				<< "," << Fz[part] / (Cq*Aref)	// Aerodynamic force coefficient in y
+				<< "\n";
+			ofs.close();
+		}
+	#endif
+	
+	return;
+}
+
+// Impulse Force Calculation (NOCA method)
 void force_calculation::imp_force(const Particle& par, const Body& body){
-    // Under code migration
+	// Remember the equation for force 
+	//   F = (1/2 * rho * U^2) * Cd * A_ref
+	// The equation of force integral vorticity moment
     return;
 }

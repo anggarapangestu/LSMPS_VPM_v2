@@ -34,7 +34,7 @@ namespace Pars
         
         // Operator Flag
         extern const bool flag_pressure_calc  = _X_;    // [I] The flag to calculate pressure on post processing [STILL NOT CHECKED]
-        extern const bool flag_adaptive_dist  = _O_;    // [I] The flag for adaptive particle distribution
+        extern const bool flag_adaptive_dist  = _X_;    // [I] The flag for adaptive particle distribution
         extern const bool flag_fast_remesh    = _X_;    // [I] [TURN this OFF] The flag for effective remeshing calculation (Turns out not very effective that I thought, otherwise slightly slower)
         
         // Additional Flag
@@ -52,7 +52,7 @@ namespace Pars
                     1:= Resume simulation from iteration "resume_step"
                 */
         
-        extern const int opt_init_particle = 5;
+        extern const int opt_init_particle = 1;
                 /* [O] The particle initialization type option:
                     0:= Testing Resolution;
                     1:= Single Resolution;
@@ -60,6 +60,14 @@ namespace Pars
                     3:= Multi-Res Multi Block; ** [Not Ready YET]
                     4:= Multi-Res Body Adjusted;
                     5:= Grid Node Based
+                */
+        
+        extern const int opt_init_vorticity = 1;
+                /* [O] The vorticity initialization type option:
+                    0:= No initialized vorticity;
+                    1:= Perlman vorticity;
+                    2:= Reserved ...;
+                    3:= Reserved ...;
                 */
 
         extern const std::vector<int> opt_body = {1,2,4,1,4};
@@ -74,7 +82,7 @@ namespace Pars
                     6:= -                   |  *Heart;
                 */
 
-        extern const int opt_neighbor = 4;
+        extern const int opt_neighbor = 3;
                 /* [O] The neighbor evaluation type option:
                     0:= Direct Neighbor Search;
                     1:= Linked List;
@@ -123,10 +131,10 @@ namespace Pars
     // +----------- Simulation Domain Parameter -----------+
     // =====================================================
     // #pragma region DOMAIN_PARAMETER
-        extern const double lxdom = 25.0e0;     // [I] Initial domain length on x-axis
-        extern const double lydom = 12.0e0;     // [I] Initial domain length on y-axis
-        extern const double lzdom = 0.0e0;      // [I] Initial domain length on z-axis
-        extern const double xdom  = 5.0e0;      // [I] Negative x-direction domain length
+        extern const double lxdom = 4.0e0; //25.0e0; //4.0e0;  // 20.0e0;     // [I] Initial domain length on x-axis
+        extern const double lydom = 4.0e0; //12.0e0; //4.0e0;  // 10.0e0;     // [I] Initial domain length on y-axis
+        extern const double lzdom = 0.0e0; //0.0e0;  //0.0e0;   // 0.0e0;      // [I] Initial domain length on z-axis
+        extern const double xdom  = Pars::lxdom/2.0; //3.0e0;  //2.0e0;   // 3.0e0;      // [I] Negative x-direction domain length
         extern const double xcenter = 0.0e0;    // [I] Initial domain center (x-axis), default 0.0
         extern const double ycenter = 0.0e0;    // [I] Initial domain center (y-axis), default 0.0
         extern const double zcenter = 0.0e0;    // [I] Initial domain center (z-axis), default 0.0
@@ -150,8 +158,8 @@ namespace Pars
     // +----------- Incompressible Fluid Properties -----------+
     // =========================================================
     // #pragma region FLUID_PROPERTIES
-        extern const double RE = 550.0e0;       // [I] The reynold number
-        extern const double u_inf = 1.0e0;      // [I] Freestream x-direction velocity
+        extern const double RE = 200.0e0;       // [I] The reynold number
+        extern const double u_inf = 0.0e0;      // [I] Freestream x-direction velocity
         extern const double v_inf = 0.0e0;      // [I] Freestream y-direction velocity
         extern const double w_inf = 0.0e0;      // [I] Freestream z-direction velocity
         extern const double RHO = 1.0e0;        // [I] Fluid density
@@ -168,8 +176,8 @@ namespace Pars
         // Basic parameter
         extern const double sigma    = 0.01e0;      // [I] Particle core size; <?> default: 0.0025, dt~(1/2)*sigma - (1/3)*sigma
         extern const double dt       = 0.005e0;     // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
-        extern const double sim_time = 200.0e0;     // [I] The total simulation time
-        extern const int resume_step = 38600; //39600;//      // [I] Iteration step ID of data for resuming simulation
+        extern const double sim_time = 100.0e0;     // [I] The total simulation time
+        extern const int resume_step = 60000;      // [I] Iteration step ID of data for resuming simulation
 
         // Stability Criteria
         extern const double phi_s     = 0.595e0;    // [A] (Ploumhans [2000]) for the Euler explicit scheme,phi_s = 0.595, !for the Adams–Bashforth 2 scheme, phi_s = 0.297, BUt can not use AB2 due to redistribution changes np--> need Biot-Savart again
@@ -198,7 +206,7 @@ namespace Pars
         // extern const double body_ext = 15.0*sigma;  // [I] The body extention distance to evaluate the chi and active particle (must bigger than Pars::numpen * Pars::sigma)
         extern const double body_ext = 0.1*Pars::Df;// [I] The body extention distance to evaluate the chi and active particle (must bigger than Pars::numpen * Pars::sigma)
         extern const double mp_shift = 0.5*sigma;   // [L] A distance shift from the midplane to create the unbalance calculation [1 core size but customable]
-        extern const int max_level = 3;             // [I] Number of resolution level
+        extern const int max_level = 2;             // [I] Number of resolution level
                                                         // -> Level is counted from 0 as the largest particle size
                                                         // -> Maximum level is the finest particle size (max_level = 0 -> single resolution)
                                                         // -> The number of resolution level is 'max_level' + 1
@@ -265,17 +273,17 @@ namespace Pars
     // +----------- Penalization Parameter -----------+
     // ================================================
     // #pragma region PENALIZATION_PARAMETER
-        extern const int opt_pen = 1;       // [O] The penalization type option (*method from Rasmussen 2011)
+        extern const int opt_pen = 2;       // [O] The penalization type option (*method from Rasmussen 2011)
                                             //    1:= Implicit penalization         [lambda = 1.0e4]
                                             //    2:= Semi-implicit penalization    [lambda = 1.0e4]
                                             //    3:= Explicit penalization         [lambda = 1.0/dt] to impose the solid velocity
         int opt_kaipen = 0;                 // [O] The option for penalization masking χ (chi): [!] Input must not be changed from 0
                                             //    0:= No chi recalculation;
                                             //    1:= Recalculate by kai, to avoid singularities (*Rasmussen phD 2011) <!> Actually for semi implicit calculation <!>
-        double lambda = 1.0e4;              // [I] Value of penalization constant
+        double lambda = 1.0e4;              // [I] Value of penalization constant [1.0e4]
         // extern const int numpen = 6;        // [L] Number of particle from body surface for penalization domain evaluation (*6 from some reference)
-        extern const double hmollif =       // [I] The half mollification length [sqrt(2)*sigma]
-            1.0e0 * std::sqrt(2.0e0) * sigma;
+        extern const double hmollif =       // [I] The half mollification length [sqrt(2)*sigma or 2*sigma or sqrt(8)*sigma]
+            2.0e0 * /*std::sqrt(2.0e0) * */sigma;
         extern const int pen_iter = 10;     // [I] The penalization iteration for iterative brinkman type
     // #pragma endregion
 
@@ -329,7 +337,7 @@ namespace Pars
             1 + std::ceil(Pars::sim_time / Pars::dt);
         
         // Parameter of data write
-        extern const int step_inv = 100;             // [I] Step interval for saving data parameter [Type 1]
+        extern const int step_inv = 1;             // [I] Step interval for saving data parameter [Type 1]
         extern const int file_num = 100;            // [I] Total file to be saved parameter [Type 2]
         extern const double comp_time_inv = 200.0;  // [I] Computational time (in second) interval for data writting parameter [Type 3]
 
@@ -377,6 +385,17 @@ namespace Pars
         extern const double U_star = 6.6;       //!! ROTATION PARAMETER, STILL BUGGED
         extern const double tetha_nol = 15.0e0; //equilibrium angular position of spring [deg] //!! ROTATION PARAMETER, STILL BUGGED
     // #pragma endregion
+
+    // =====================================================
+    // +-------------- Interpolation Process --------------+
+    // =====================================================
+    // #pragma region INTERPOLATION_PARAMETER
+        extern const double lxdomInt = 5.0e0;   // [I] Initial domain length on x-axis
+        extern const double lydomInt = 3.0e0;   // [I] Initial domain length on y-axis
+        extern const double lzdomInt = 3.0e0;   // [I] Initial domain length on z-axis
+        extern const double xdomInt = -1.0e0;    // [I] Negative x-direction domain length
+        extern const double sigmaInt = 0.05e0;   // [I] Initial domain center (x-axis), default 0.0
+    // #pragma endregion INTERPOLATION_PARAMETER
 
     // #pragma region NOT_USED_PARAMETER
     /* OLD DATA PARAMETER
@@ -448,6 +467,7 @@ namespace Pars
 #elif DIM == 3  // The parameter for 3 Dimension Simulation
 namespace Pars
 {
+    // Reference (Flow over sphere at Re 300): https://www.youtube.com/watch?v=PyCaYTf1o7E
     // Predescription for each parameter variable
     // [A] -> Already given in this program
     // [L] -> Given a value but can be altered by user
@@ -488,7 +508,7 @@ namespace Pars
     // +----------- Simulation Parameter Option -----------+
     // =====================================================
     // #pragma region PARAMETER_OPTION
-        extern const int opt_start_state = 0;
+        extern const int opt_start_state = 1;
                 /* [O] Option for starting state of simulation:
                     0:= Start over the simulation from 0.0s;
                     1:= Resume simulation from iteration "resume_step"
@@ -503,8 +523,16 @@ namespace Pars
                     4:= Multi-Res Body Adjusted;
                     5:= Grid Node Based
                 */
+        
+        extern const int opt_init_vorticity = 0;
+                /* [O] The vorticity initialization type option:
+                    0:= No initialized vorticity;
+                    1:= Perlman vorticity;
+                    2:= Reserved ...;
+                    3:= Reserved ...;
+                */
 
-        extern const std::vector<int> opt_body = {2,5,4,1,4};
+        extern const std::vector<int> opt_body = {1,5,4,1,4};
                 /* [O] The body type option:
                             2D simulation   |   3D simulation   
                         --------------------|-------------------
@@ -565,10 +593,10 @@ namespace Pars
     // +----------- Simulation Domain Parameter -----------+
     // =====================================================
     // #pragma region DOMAIN_PARAMETER
-        extern const double lxdom = 8.0e0;      // [I] Initial domain length on x-axis
-        extern const double lydom = 3.0e0;      // [I] Initial domain length on y-axis
-        extern const double lzdom = 3.0e0;      // [I] Initial domain length on z-axis
-        extern const double xdom  = 1.0e0;      // [I] Negative x-direction domain length
+        extern const double lxdom = 18.0e0;      // [I] Initial domain length on x-axis
+        extern const double lydom = 4.5e0;      // [I] Initial domain length on y-axis
+        extern const double lzdom = 4.5e0;      // [I] Initial domain length on z-axis
+        extern const double xdom  = 1.2e0;      // [I] Negative x-direction domain length
         extern const double xcenter = 0.0e0;    // [I] Initial domain center (x-axis), default 0.0
         extern const double ycenter = 0.0e0;    // [I] Initial domain center (y-axis), default 0.0
         extern const double zcenter = 0.0e0;    // [I] Initial domain center (z-axis), default 0.0
@@ -592,7 +620,7 @@ namespace Pars
     // +----------- Incompressible Fluid Properties -----------+
     // =========================================================
     // #pragma region FLUID_PROPERTIES
-        extern const double RE = 550.0e0;       // [I] The reynold number
+        extern const double RE = 300.0e0;       // [I] The reynold number
         extern const double u_inf = 1.0e0;      // [I] Freestream x-direction velocity
         extern const double v_inf = 0.0e0;      // [I] Freestream y-direction velocity
         extern const double w_inf = 0.0e0;      // [I] Freestream z-direction velocity
@@ -608,10 +636,10 @@ namespace Pars
     // ===============================================
     // #pragma region COMPUTATIONAL_PARAMETER
         // Basic parameter
-        extern const double sigma    = 0.02e0;      // [I] Particle core size; <?> default: 0.0025, dt~(1/2)*sigma - (1/3)*sigma
-        extern const double dt       = 0.005e0;     // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
+        extern const double sigma    = 0.03e0;      // [I] Particle core size; <?> default: 0.0025, dt~(1/2)*sigma - (1/3)*sigma
+        extern const double dt       = 0.01e0;     // [I] Simulation time step; <?> default:0.001, dt <= phi_s*sigma^2/vis (Ploumhans [2000]) OR dt = phi_s*sigma^2*Courant^2/vis, where 0 < Courant <= 1
         extern const double sim_time = 200.0e0;     // [I] The total simulation time
-        extern const int resume_step = 3300; //39600;//      // [I] Iteration step ID of data for resuming simulation
+        extern const int resume_step = 6900; //39600;//      // [I] Iteration step ID of data for resuming simulation
 
         // Stability Criteria
         extern const double phi_s     = 0.595e0;    // [A] (Ploumhans [2000]) for the Euler explicit scheme,phi_s = 0.595, !for the Adams–Bashforth 2 scheme, phi_s = 0.297, BUt can not use AB2 due to redistribution changes np--> need Biot-Savart again
@@ -626,8 +654,8 @@ namespace Pars
         extern const int rmsh_inv = 1;              // [I] Step interval for remeshing evaluation
         extern const int adapt_inv = 5;             // [I] Step interval for adaptation evaluation
         extern const int ngh_diff_level = 1;        // [I] Maximum neighbor node different level (for NDL criteria)
-        extern const double adapt_tol = 5.0e-2;     // [I] The adaptation tolerance (factor to set the window difference of value between levels)
-        extern const double active_sig = 1.0e-6;    // [I] The significant ratio toward the source maximum value [*vorticity] for an active particle
+        extern const double adapt_tol = 1.0e-2;     // [I] The adaptation tolerance (factor to set the window difference of value between levels)
+        extern const double active_sig = 1.0e-4;    // [I] The significant ratio toward the source maximum value [*vorticity] for an active particle
 
     // #pragma endregion
 
@@ -640,7 +668,7 @@ namespace Pars
         // extern const double body_ext = 15.0*sigma;  // [I] The body extention distance to evaluate the chi and active particle (must bigger than Pars::numpen * Pars::sigma)
         extern const double body_ext = 0.1*Pars::Df;// [I] The body extention distance to evaluate the chi and active particle (must bigger than Pars::numpen * Pars::sigma)
         extern const double mp_shift = 1.0*sigma;   // [L] A distance shift from the midplane to create the unbalance calculation [1 core size]
-        extern const int max_level = 5;             // [I] Number of resolution level
+        extern const int max_level = 4;             // [I] Number of resolution level
                                                         // -> Level is counted from 0 as the largest particle size
                                                         // -> Maximum level is the finest particle size (max_level = 0 -> single resolution)
                                                         // -> The number of resolution level is 'max_level' + 1
@@ -707,7 +735,7 @@ namespace Pars
     // +----------- Penalization Parameter -----------+
     // ================================================
     // #pragma region PENALIZATION_PARAMETER
-        extern const int opt_pen = 1;       // [O] The penalization type option (*method from Rasmussen 2011)
+        extern const int opt_pen = 2;       // [O] The penalization type option (*method from Rasmussen 2011)
                                             //    1:= Implicit penalization [lambda = 1.0e4];
                                             //    2:= Semi-implicit penalization;
                                             //    3:= Explicit penalization [lambda = 1.0/dt]
@@ -717,7 +745,7 @@ namespace Pars
         double lambda = 1.0e4;              // [I] Value of penalization constant
         extern const int numpen = 6;        // [L] Number of particle from body surface for penalization domain evaluation (*6 from some reference)
         extern const double hmollif =       // [I] The half mollification length [sqrt(2)*sigma]
-            1.0e0 * std::sqrt(2.0e0) * sigma;
+            2.0e0 /* * std::sqrt(2.0e0) */ * sigma;
         extern const int pen_iter = 10;     // [I] The penalization iteration for iterative brinkman type
     // #pragma endregion
 
@@ -771,7 +799,7 @@ namespace Pars
             1 + std::ceil(Pars::sim_time / Pars::dt);
         
         // Parameter of data write
-        extern const int step_inv = 100;             // [I] Step interval for saving data parameter [Type 1]
+        extern const int step_inv = 50;             // [I] Step interval for saving data parameter [Type 1]
         extern const int file_num = 100;            // [I] Total file to be saved parameter [Type 2]
         extern const double comp_time_inv = 200.0;  // [I] Computational time (in second) interval for data writting parameter [Type 3]
 
@@ -819,6 +847,17 @@ namespace Pars
         extern const double U_star = 6.6;       //!! ROTATION PARAMETER, STILL BUGGED
         extern const double tetha_nol = 15.0e0; //equilibrium angular position of spring [deg] //!! ROTATION PARAMETER, STILL BUGGED
     // #pragma endregion
+
+    // =====================================================
+    // +-------------- Interpolation Process --------------+
+    // =====================================================
+    // #pragma region INTERPOLATION_PARAMETER
+        extern const double lxdomInt = 5.0e0;   // [I] Initial domain length on x-axis
+        extern const double lydomInt = 2.0e0;   // [I] Initial domain length on y-axis
+        extern const double lzdomInt = 2.0e0;   // [I] Initial domain length on z-axis
+        extern const double xdomInt = -0.8e0;    // [I] Negative x-direction domain length
+        extern const double sigmaInt = 0.05e0;   // [I] Initial domain center (x-axis), default 0.0
+    // #pragma endregion INTERPOLATION_PARAMETER
 
 } // namespace Pars
 
