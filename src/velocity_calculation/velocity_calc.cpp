@@ -17,9 +17,10 @@ void save_ngh_all(const Particle &_myPar, int ID);      // For DEBUGGING
 /** The type of 2D simulation FMM calculation
  *   [1] : Old fashion code
  *   [2] : New code using tree code built in unordered map of cell pointer
- *   [3] : Poisson solver using LSMPS
- *   [4] : Multiresolution poisson solver using LSMPS
- *   [5] : Multiresolution poisson solver using LSMPS (Modification)
+ *   [3] : Poisson solver using LSMPS on Stream function
+ *   [4] : Poisson solver using LSMPS on Velocity
+ *   [5] : Multiresolution poisson solver using LSMPS
+ *   [6] : Multiresolution poisson solver using LSMPS (Modification)
 */
 #define VELOCITY_2D_TYPE 3
 
@@ -33,7 +34,7 @@ void save_ngh_all(const Particle &_myPar, int ID);      // For DEBUGGING
  *   0:= Only take the equation inside domain, 
  *   1:= Take boundary condition into account
 */
-#define BOUNDARY_ACTIVE 0
+#define BOUNDARY_ACTIVE 1
 
 #define ALL_PARTICLE true	// Code construction is still on going
 
@@ -176,16 +177,20 @@ void VelocityCalc::get_velocity(Particle &p, const GridNode &bGrd, const int ste
 			this->velocity_fmm_2d(p, step);
 			break;
 		case 3:	// LSMPS based poisson solver velocity calculation
-			printf("%s<+> Type 3: LSMPS poisson solver %s\n", FONT_CYAN, FONT_RESET);
+			printf("%s<+> Type 3: LSMPS poisson on stream function%s\n", FONT_CYAN, FONT_RESET);
 			this->velocity_LSMPS_poisson_2d(p, step);
 			// this->velocity_LSMPS_poisson_2d_mod(p, step);
 			break;
-		case 4:	// LSMPS based poisson solver velocity calculation w/ multiresolution modification
-			printf("%s<+> Type 4: LSMPS poisson solver multires %s\n", FONT_CYAN, FONT_RESET);
+		case 4:	// LSMPS based poisson solver velocity calculation
+			printf("%s<+> Type 4: LSMPS poisson on velocity %s\n", FONT_CYAN, FONT_RESET);
+			this->velocity_LSMPS_poisson_2d_vel(p, step);
+			break;
+		case 5:	// LSMPS based poisson solver velocity calculation w/ multiresolution modification
+			printf("%s<+> Type 5: LSMPS poisson solver multires %s\n", FONT_CYAN, FONT_RESET);
 			this->velocity_LSMPS_poisson_2d_mres(p, bGrd, step);
 			break;
-		case 5:	// A simple test for fast debugger
-			printf("%s<+> Type 5: LSMPS poisson multires debug %s\n", FONT_CYAN, FONT_RESET);
+		case 6:	// A simple test for fast debugger
+			printf("%s<+> Type 6: LSMPS poisson multires debug %s\n", FONT_CYAN, FONT_RESET);
 			this->velocity_LSMPS_poisson_2d_mres_2(p);
 			break;
 		default:
@@ -245,8 +250,130 @@ void VelocityCalc::get_velocity(Particle &p, const GridNode &bGrd, const int ste
 	return;
 }
 
+// =====================================================
+// +-------------- ADDITIONAL CALCULATOR --------------+
+// =====================================================
 // Testing LSMPS Poisson
-void VelocityCalc::LSMPS_poisson_2d(Particle &_particle, const int _step){
+void VelocityCalc::LSMPS_poisson_2d(Particle &p, const int _step){
+	/**
+	 * DATA:
+	 *  - Coordinate p.x, p.y, p.z
+	 *  - Size		 p.s
+	 *  - Neighbor   p.neighbor
+	 *  - Source     p.vorticity
+	 *  - Boundary   p.isBoundary, p.boundaryVal 
+	 *  - Analytics  p.chi ?
+	 *  - Result     p.gz  ?
+	*/
+
+	save_data save_manager;
+	std::ofstream _write;
+	double T1, T2;
+	
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		double _time = omp_get_wtime();
+	#endif
+	
+    // PROCEDURE 1: Data initialization
+    // ********************************************************************
+	std::vector<std::vector<double>> particle_POS (DIM);	// Particle position
+	std::vector<double> RHS = p.vorticity;	// The particle source value container (Poisson)
+	// std::vector<double> RHS(p.num, 0.0);	// The particle source value container (Laplace)
+	std::vector<double> psi;
+
+	// Assign the particle data into container
+	basis_loop(d) particle_POS[d].resize(p.num, 0.0e0);
+	#pragma omp parallel for
+	for (int i = 0; i < p.num; i++){
+		particle_POS[0][i] = p.x[i];
+		particle_POS[1][i] = p.y[i];
+		
+		// Assign the value of right hand side
+		#if (BOUNDARY_ACTIVE == 1)
+			// if (p.isBoundary[i] == true) RHS[i] = p.chi[i];
+			if (p.boundaryLoc[i] != 0) RHS[i] = p.boundaryVal[i];
+		#endif
+	}
+	
+	// PROCEDURE 2: Generate the global matrix
+    // ********************************************************************
+	// Generate the global matrix 
+	//  * At initial of simulation step 0
+	//  * At initial of resume step (resume_step + 1)
+	//  * When adaptation is done
+	// if ((p.isAdapt == true) || 
+	// 	(Pars::opt_start_state == 0 && _step == 0) ||
+	// 	(Pars::opt_start_state == 1 && _step == Pars::resume_step+1))
+	// {
+		// #if (TIMER_PAR == 0)
+		// 	// Timer using super clock (chrono)
+		// 	std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+		// #elif (TIMER_PAR == 1)
+		// 	// Timer using paralel package
+		// 	double _time = omp_get_wtime();
+		// #endif
+
+		// Generate the global matrix
+		printf("Generate the global matrix ... \n");
+		poissonSolver.create_global_matrix(particle_POS, p.neighbor, p.s, p.boundaryLoc /*p.isBoundary*/);
+
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+			double _time = span.count();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			_time = omp_get_wtime() - _time;
+		#endif
+		// printf("<-> Global matrix computation time  :  [%f s]\n", _time);
+		printf("<+> Initialize global matrix     :  %f s\n", _time);
+	// }
+
+	// Update timer container
+	T1 = _time;
+
+	// PROCEDURE 3: Solve the poisson equation
+    // ********************************************************************
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		tick = std::chrono::system_clock::now();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		// double _time = omp_get_wtime();
+		_time = omp_get_wtime();
+	#endif
+
+	// Solve the global matrix
+	printf("\nSolve the potential of poisson equation ... \n");
+	poissonSolver.solve(RHS);
+	
+	// Get the stream function calculated from poisson equation
+	p.gz = poissonSolver.get_phi();
+
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+		double _time = span.count();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		_time = omp_get_wtime() - _time;
+	#endif
+	// printf("<-> Poisson solver computation time :  [%f s]\n", _time);
+	printf("<+> Step 1: Solve global matrix  :  %f s\n", _time);
+
+	// Update timer container
+	T2 = _time;
+
+	_write.open(save_manager.get_log_directory(), std::ofstream::out | std::ofstream::app);
+	_write << "Matrix Generation Time             : "  << wR << T1 << "\n";
+	_write << "Solving Matrix Time                : "  << wR << T2 << "\n";
+	_write << "Total computational Time           : "  << wR << T1+T2 << "\n";
+	_write.close();
+	
 	return;
 }
 
@@ -451,8 +578,7 @@ void VelocityCalc::velocity_fmm_2d(Particle &p, const int step){
 }
 
 /**
- *  @brief The velocity solution using LSMPS poisson solver.
- *  NOTE: <?> Need to be check.
+ *  @brief The velocity solution using LSMPS poisson solver on the stream function.
  *  
  *  @param	_particle  The particle for velocity evaluation.
  *  @param  _step  The current simulation iteration.
@@ -483,8 +609,11 @@ void VelocityCalc::velocity_LSMPS_poisson_2d(Particle &p, const int _step){
 		#if (BOUNDARY_ACTIVE == 0)
 			RHS[i] = -p.vorticity[i];
 		#elif (BOUNDARY_ACTIVE == 1)
-			if (p.isBoundary[i] == true)	RHS[i] = 0;
-			else	RHS[i] = -p.vorticity[i];
+			// if (p.isBoundary[i] == true)	RHS[i] = 0; // p.gz[i];  // p.boundaryVal[i];
+			if (p.boundaryLoc[i] != 0)
+				RHS[i] = 0.0; // p.boundaryVal[i];
+			else
+				RHS[i] = -p.vorticity[i];
 		#endif
 	}
 	
@@ -508,7 +637,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d(Particle &p, const int _step){
 
 		// Generate the global matrix
 		printf("Generate the global matrix ... \n");
-		poissonSolver.create_global_matrix(particle_POS, p.neighbor, p.s, p.isBoundary);
+		poissonSolver.create_global_matrix(particle_POS, p.neighbor, p.s, p.boundaryLoc /*p.isBoundary*/);
 
 		#if (TIMER_PAR == 0)
 			// Timer using super clock (chrono)
@@ -534,7 +663,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d(Particle &p, const int _step){
 	#endif
 
 	// Solve the global matrix
-	printf("Solve the potential of poisson equation ... \n");
+	printf("\nSolve the potential of poisson equation ... \n");
 	poissonSolver.solve(RHS);
 	
 	// Get the stream function calculated from poisson equation
@@ -569,11 +698,14 @@ void VelocityCalc::velocity_LSMPS_poisson_2d(Particle &p, const int _step){
 	std::vector<double> dPsidx = LSMPSpsi.get_ddx();
 	std::vector<double> dPsidy = LSMPSpsi.get_ddy();
 
+	// Reserve the data for phi
+	p.P = std::vector<double>(p.num);
+
 	// Update the velocity
 	for (int i = 0; i < p.num; i++){
 		p.u[i] = dPsidy[i];
 		p.v[i] = -dPsidx[i];
-		// p.v[i] = psi[i];
+		p.P[i] = psi[i];
 	}
 
 	#if (TIMER_PAR == 0)
@@ -590,10 +722,161 @@ void VelocityCalc::velocity_LSMPS_poisson_2d(Particle &p, const int _step){
 	return;
 }
 
+/**
+ *  @brief The velocity solution using LSMPS poisson solver on the stream function.
+ *  
+ *  @param	_particle  The particle for velocity evaluation.
+ *  @param  _step  The current simulation iteration.
+*/
+void VelocityCalc::velocity_LSMPS_poisson_2d_vel(Particle &p, const int _step){
+	/* Procedure:
+       1. Prepare the data for velocity calculation (by FMM)
+       2. Generate the global matrix
+       3. Solve the global matrix
+       4. Update the particle data
+    */
+   	
+	// PROCEDURE 0: Calculate the poisson source
+    // ********************************************************************
+	// Here the poisson equation for 2D
+	//    lap(u) = -dw/dy
+	//    lap(v) = dw/dx
+	// Calculate the vorticity differential
+	LSMPSa lsmps_tool;
+	lsmps_tool.set_LSMPS(p.x, p.y, p.s, p.vorticity, p.neighbor);
+	std::vector<double> dwdx = lsmps_tool.get_ddx();
+	std::vector<double> dwdy = lsmps_tool.get_ddy();
+
+
+    // PROCEDURE 1: Data initialization
+    // ********************************************************************
+	std::vector<std::vector<double>> particle_POS (DIM);	// Particle position
+	// std::vector<double> RHS = p.vorticity;	// The particle source value container
+	std::vector<double> RHS_v(p.num, 0.0);		// The particle source value container
+	std::vector<double> RHS_u(p.num, 0.0);		// The particle source value container
+
+	// Note on boundary condition (All dirichlet)
+	//  > Farfield      : U = 0, V = 0
+	//  > Wall          : U = 0, V = 0
+	//  > Inlet/Outlet  : U = U_stream, V = 0
+
+	// Assign the particle data into container
+	basis_loop(d) particle_POS[d].resize(p.num, 0.0e0);
+	#pragma omp parallel for
+	for (int i = 0; i < p.num; i++){
+		particle_POS[0][i] = p.x[i];
+		particle_POS[1][i] = p.y[i];
+		
+		// Assign the value of right hand side
+		#if (BOUNDARY_ACTIVE == 0)
+			RHS_u[i] = -dwdy[i];	// lap(u) = -dw/dy
+			RHS_v[i] = dwdx[i];		// lap(v) = dw/dx
+		#elif (BOUNDARY_ACTIVE == 1)
+			// Set the RHS for u poisson and v poisson equation
+			if (p.boundaryLoc[i] == 0){
+				// Inside domain
+				RHS_u[i] = -dwdy[i];	// lap(u) = -dw/dy
+				RHS_v[i] = dwdx[i];		// lap(v) = dw/dx
+			}
+			else{
+				// Domain boundary 
+				RHS_u[i] = p.vortx[i];  // 0.0
+				RHS_v[i] = p.vorty[i];  // 0.0
+			}
+		#endif
+	}
+	
+	// PROCEDURE 2: Generate the global matrix
+    // ********************************************************************
+	// Generate the global matrix 
+	//  * At initial of simulation step 0
+	//  * At initial of resume step (resume_step + 1)
+	//  * When adaptation is done
+	if ((p.isAdapt == true) || 
+		(Pars::opt_start_state == 0 && _step == 0) ||
+		(Pars::opt_start_state == 1 && _step == Pars::resume_step+1))
+	{
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			double _time = omp_get_wtime();
+		#endif
+
+		// Generate the global matrix
+		printf("Generate the global matrix ... \n");
+		poissonSolver.create_global_matrix(particle_POS, p.neighbor, p.s, p.boundaryLoc /*p.isBoundary*/);
+
+		#if (TIMER_PAR == 0)
+			// Timer using super clock (chrono)
+			std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+			double _time = span.count();
+		#elif (TIMER_PAR == 1)
+			// Timer using paralel package
+			_time = omp_get_wtime() - _time;
+		#endif
+		// printf("<-> Global matrix computation time  :  [%f s]\n", _time);
+		printf("<+> Initialize global matrix     :  %f s\n", _time);
+	}
+
+
+	// PROCEDURE 3: Solve the poisson equation
+    // ********************************************************************
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		std::chrono::_V2::system_clock::time_point tick = std::chrono::system_clock::now();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		double _time = omp_get_wtime();
+	#endif
+
+	// Solve the global matrix
+	printf("\nSolve the x velocity of poisson equation ... \n");
+	poissonSolver.solve(RHS_u);		// Solve the global matrix
+	p.u = poissonSolver.get_phi();	// Get the velocity x
+
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+		double _time = span.count();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		_time = omp_get_wtime() - _time;
+	#endif
+	printf("<+> Velocity x comp. time        :  %f s\n", _time);
+
+
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		tick = std::chrono::system_clock::now();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		_time = omp_get_wtime();
+	#endif
+
+	// Solve the global matrix
+	printf("\nSolve the y velocity of poisson equation ... \n");
+	poissonSolver.solve(RHS_v);			// Solve the global matrix
+	p.v = poissonSolver.get_phi();	// Get the velocity y
+
+	#if (TIMER_PAR == 0)
+		// Timer using super clock (chrono)
+		std::chrono::duration<double> span = std::chrono::system_clock::now() - tick;
+		double _time = span.count();
+	#elif (TIMER_PAR == 1)
+		// Timer using paralel package
+		_time = omp_get_wtime() - _time;
+	#endif
+	printf("<+> Velocity y comp. time        :  %f s\n", _time);
+	
+	return;
+}
 
 /**
  *  @brief The velocity solution using LSMPS poisson solver.
- *  NOTE: <?> Need to be check.
+ *  NOTE: <?> Need to be check. Change the order of particle data point.
+ *  This solver make a new order of particle before doing the solver.
  *  
  *  @param	_particle  The particle for velocity evaluation.
  *  @param  _step  The current simulation iteration.
@@ -622,7 +905,8 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 	// [!] Rearrange the data order
 	// Collect all particle inside the 
 	for (int i = 0; i < p.num; i++){
-		if (p.isBoundary[i] == true){
+		// if (p.isBoundary[i] == true){
+		if (p.boundaryLoc[i] != 0){
 			indexBoundary.push_back(i);
 		}
 	}
@@ -630,7 +914,8 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 	// Separate the data by [Inside, Boundary]
 	// Assign the Inside data
 	for (int i = 0; i < p.num; i++){
-		if (p.isBoundary[i] == false){
+		// if (p.isBoundary[i] == false){
+		if (p.boundaryLoc[i] == 0){
 			// Get the indexing
 			indexNew[i] = orderedPar.num;
 
@@ -639,7 +924,8 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 			orderedPar.y.push_back(p.y[i]);
 			orderedPar.s.push_back(p.s[i]);
 			orderedPar.vorticity.push_back(p.vorticity[i]);
-			orderedPar.isBoundary.push_back(p.isBoundary[i]);
+			// orderedPar.isBoundary.push_back(p.isBoundary[i]);
+			orderedPar.boundaryLoc.push_back(p.boundaryLoc[i]);
 			orderedPar.boundaryVal.push_back(p.boundaryVal[i]);
 			orderedPar.num++;
 		}
@@ -655,7 +941,8 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 		orderedPar.y.push_back(p.y[ID]);
 		orderedPar.s.push_back(p.s[ID]);
 		orderedPar.vorticity.push_back(p.vorticity[ID]);
-		orderedPar.isBoundary.push_back(p.isBoundary[ID]);
+		// orderedPar.isBoundary.push_back(p.isBoundary[ID]);
+		orderedPar.boundaryLoc.push_back(p.boundaryLoc[ID]);
 		orderedPar.boundaryVal.push_back(p.boundaryVal[ID]);
 		orderedPar.num++;
 	}
@@ -732,7 +1019,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 
 		// Generate the global matrix
 		printf("Generate the global matrix ... \n");
-		poissonSolver.create_global_matrix(particle_POS, orderedPar.neighbor, orderedPar.s, orderedPar.isBoundary);
+		poissonSolver.create_global_matrix(particle_POS, orderedPar.neighbor, orderedPar.s, orderedPar.boundaryLoc /*orderedPar.isBoundary*/);
 
 		#if (TIMER_PAR == 0)
 			// Timer using super clock (chrono)
@@ -758,7 +1045,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 	#endif
 
 	// Solve the global matrix
-	printf("Solve the potential of poisson equation ... \n");
+	printf("\nSolve the potential of poisson equation ... \n");
 	poissonSolver.solve(RHS);
 	
 	// Get the stream function calculated from poisson equation
@@ -824,7 +1111,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mod(Particle &p, const int _step){
 
 /**
  *  @brief The velocity solution using LSMPS poisson solver.
- *  NOTE: <?> Need to be check.
+ *  NOTE: <?> Need to be check. (Using patch only for 2 resolution)
  *  
  *  @param	_particle  The particle for velocity evaluation.
 */
@@ -1177,7 +1464,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mres_2(Particle &p){
 
 	// Generate the global matrix
 	printf("Generate the global matrix ... \n");
-	poissonSolver.create_global_matrix(particle_POS, dataCombine.neighbor, dataCombine.s, dataCombine.isBoundary);
+	poissonSolver.create_global_matrix(particle_POS, dataCombine.neighbor, dataCombine.s, dataCombine.boundaryLoc /*dataCombine.isBoundary*/);
 
 	#if (TIMER_PAR == 0)
 		// Timer using super clock (chrono)
@@ -1202,7 +1489,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mres_2(Particle &p){
 	#endif
 
 	// Solve the global matrix
-	printf("Solve the potential of poisson equation ... \n");
+	printf("\nSolve the potential of poisson equation ... \n");
 	poissonSolver.solve(RHS);
 	
 	// Get the stream function calculated from poisson equation
@@ -1261,7 +1548,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mres_2(Particle &p){
 
 /**
  *  @brief The velocity solution using LSMPS poisson solver.
- *  NOTE: <?> Need to be check.
+ *  NOTE: <?> Need to be check. The serious MRES calculation.
  *  
  *  @param	_particle  The particle for velocity evaluation.
  *  @param	_baseGrid  The node grid of particle data.
@@ -1606,8 +1893,9 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mres(Particle &basePar, const GridN
 		(DIM, std::vector<double>(totalNum, 0.0));
 	std::vector<std::vector<int>> comb_ngh(totalNum);	// Combined particle neighbor list
 	std::vector<double> comb_size(totalNum, 0.0);		// Combined particle size data
-	std::vector<bool> comb_bnd_flag(totalNum, false);	// Combined particle size boundary flag 	<!> Only declared, still not constructed <!>
-	std::vector<double> comb_bnd_val(totalNum, 0.0);	// Combined particle size boundary value	<!> Only declared, still not constructed <!>
+	std::vector<bool> comb_bnd_flag(totalNum, false);	// Combined particle boundary flag 		<!> Only declared, still not constructed <!>
+	std::vector<int> comb_bnd_loc(totalNum, 0);			// Combined particle boundary location 	<!> Only declared, still not constructed <!>
+	std::vector<double> comb_bnd_val(totalNum, 0.0);	// Combined particle boundary value		<!> Only declared, still not constructed <!>
 	std::vector<double> RHS(totalNum, 0.0);		// The right hand side container (vorticity)
 	std::vector<double> psi;					// Stream function [OUTPUT]
 
@@ -1784,7 +2072,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mres(Particle &basePar, const GridN
 
 		// Generate the global matrix
 		printf("Generate the global matrix ... \n");
-		poissonSolver.create_global_matrix(comb_coord, comb_ngh, comb_size, comb_bnd_flag);
+		poissonSolver.create_global_matrix(comb_coord, comb_ngh, comb_size, comb_bnd_loc /*comb_bnd_flag*/);
 
 		#if (TIMER_PAR == 0)
 			// Timer using super clock (chrono)
@@ -1810,7 +2098,7 @@ void VelocityCalc::velocity_LSMPS_poisson_2d_mres(Particle &basePar, const GridN
 	#endif
 
 	// Solve the global matrix
-	printf("Solve the potential of poisson equation ... \n");
+	printf("\nSolve the potential of poisson equation ... \n");
 	poissonSolver.solve(RHS);
 	
 	// Get the stream function calculated from poisson equation

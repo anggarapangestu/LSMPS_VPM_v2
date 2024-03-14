@@ -109,7 +109,7 @@ void initialization::init_2d_test_2(Particle &par){
     int type = 1;               // 0:= split in x direction; 1:= split in y direction
     bool up_region = true;      // 0:= divide the lower coordinate region; 1:= divide the higher coordinate region
     bool splitted;              // Flag that denote whether the domain is splitted or not
-    double split_loc = -0.5;    // The location of splitting
+    double split_loc = 0.1;    // The location of splitting (origin at O(0,0))
 
     // Split into two region
     // Check if the particle need to be devided
@@ -334,9 +334,9 @@ void initialization::init_2d_multi_res_single_block(Particle &par, const std::ve
     
     // ====== DIVIDE AND CONQUEROR PROCEDURE ====== //
     // Put extension from the body limit to the finer resolution block limit (USER INPUT MANUALY)
-    double ext_front = 0.75e0;  // Upstream extension
-    double ext_back  = 1.50e0;  // Downstream extension
-    double ext_side  = 0.75e0;  // Side body extension
+    double ext_front = 0.5e0;  // Upstream extension
+    double ext_back  = 0.5e0;  // Downstream extension
+    double ext_side  = 0.5e0;  // Side body extension
 
     // Perform the devide and conqueror if the point inside the finer resolution block
     int chdTrans[DIM];

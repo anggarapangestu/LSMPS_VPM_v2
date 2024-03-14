@@ -34,6 +34,7 @@ private:
 
     // Vorticity Initialization type
     void perlman_vorticity(Particle &_particle);
+    void eliptic_vorticity(Particle &_particle);
 
     // Particles initialization by grid block method
     void init_par_grid_block(Particle &_particle, const std::vector<Body> &_bodyList, GridNode &g);
@@ -52,5 +53,14 @@ public:
     // Initialization global procedure
     void initialize_particle(Particle &_particle, const std::vector<Body> &_bodyList, GridNode &_baseGrid);
     void initialize_vorticity(Particle &_particle);
+
+    // A testing function
+    void test_0(Particle &_particle);
+    void test_1(Particle &_particle);
+    void test_2(Particle &_particle);
+
+    // A solution to laplace problem
+    void initialize_laplace(Particle &_particle);
+    void laplace(Particle &_particle);
 };
 #endif

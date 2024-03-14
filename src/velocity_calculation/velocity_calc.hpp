@@ -24,8 +24,8 @@ private:
 
 	void velocity_old(Particle &_particle, const int _step);
 	void velocity_fmm_2d(Particle &_particle, const int _step);
-	void LSMPS_poisson_2d(Particle &_particle, const int _step);
 	void velocity_LSMPS_poisson_2d(Particle &_particle, const int _step);
+	void velocity_LSMPS_poisson_2d_vel(Particle &_particle, const int _step);
 	void velocity_LSMPS_poisson_2d_mod(Particle &_particle, const int _step);
 	void velocity_LSMPS_poisson_2d_mres(Particle &_particle, const GridNode &_baseGrid, const int _step);
 	void velocity_LSMPS_poisson_2d_mres_2(Particle &_particle);
@@ -41,6 +41,9 @@ public:
 
 	void get_velocity(Particle &_particle, const GridNode &_baseGrid, const int _step);
 	void get_velocity(Particle &_particle, const int _step);
+
+	// Testing LSMPS Poisson
+	void LSMPS_poisson_2d(Particle &_particle, const int _step);
 };
 
 #endif

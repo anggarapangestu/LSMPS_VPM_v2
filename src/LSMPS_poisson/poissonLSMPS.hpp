@@ -25,12 +25,32 @@ private:
     int N;                      // Global matrix base size (number of particle)
     std::vector<double> phi;    // The solution to poisson problem (size of N)
     Eigen::SparseMatrix<double> A_sparse;   // The global sparse matrix (A square matrix size of N^2)
+    std::vector<Eigen::Triplet<double>> tripletList;    // The triplet list for sparse matrix constructor
     Eigen::MatrixXd A_dense;                // The global dense matrix (A square matrix size of N^2)
 
     // CLASS METHOD
     // ============
     double weight_function(const double &_rij, const double &_Re);
     std::vector<double> get_p(const double &xij, const double &yij, const double &rs);
+    
+    void matrix_const_LSMPS_A(const int &ID_i,
+                              const std::vector<std::vector<double>> &coords,
+                              const std::vector<int> &nghList,
+                              const std::vector<double> &size);
+    void matrix_const_LSMPS_B(const int &ID_i,
+                              const std::vector<std::vector<double>> &coords,
+                              const std::vector<int> &nghList,
+                              const std::vector<double> &size);
+    void matrix_const_neumann_A(const int &ID_i,
+                              const std::vector<std::vector<double>> &coords,
+                              const std::vector<int> &nghList,
+                              const std::vector<double> &size,
+                              const int& type);
+    void matrix_const_neumann_B(const int &ID_i,
+                              const std::vector<std::vector<double>> &coords,
+                              const std::vector<int> &nghList,
+                              const std::vector<double> &size,
+                              const int& type);
 
 public:
     // Parameter for Multiresolution 
@@ -49,7 +69,8 @@ public:
     void create_global_matrix(const std::vector<std::vector<double>> &coords,
                const std::vector<std::vector<int>> &nghList,
                const std::vector<double> &size,
-               const std::vector<bool> &isBoundary);
+               const std::vector<int> &boundaryLoc);
+               // const std::vector<bool> &isBoundary);
 
     // Solver
     void solve(const std::vector<double> &RHS);

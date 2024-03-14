@@ -99,7 +99,7 @@ namespace Pars{
     // #define PRECISION_FACTOR 1e-5   // A number factor to avoid wrong <double> to <int> truncation (e.g. calculating grid count from domain length division toward grid length)
     
     /** 
-     * The flag to perform property interpolation (post processing):
+     * The flag to perform property interpolation (post-processing):
      *  0:= Basic default calculation
      *  1:= Calculate the data interpolation [POST-PROCESS]
      * NOTE: Only work for data based on grid node calculation
@@ -153,6 +153,7 @@ namespace Pars
         extern const bool flag_save_parameter;  // [I] The flag to save simulation parameter
         extern const bool flag_save_sim_time;   // [I] The flag to save simulation time and computational time
         extern const bool flag_save_residual;   // [I] The flag for calculating and saving residual
+        extern const bool flag_save_stability;  // [I] The flag for saving stability
 
         // Console Display Flag
         extern const bool flag_disp_stability;  // [I] The flag to display stability parameter at each iteration
@@ -166,6 +167,7 @@ namespace Pars
         // Additional Flag
         extern const bool flag_ngh_include_self;        // [I] The flag for neighbor evaluation include itself
         extern const bool flag_slightly_shifted_domain; // [I] The flag to generate slightly unsymetrical domain (To make early separation)
+        extern const bool flag_peturbation;             // [I] The flag to generate a small source vortex to make early separation
     // #pragma endregion SIMULATION_FLAG
 
     // =====================================================
@@ -308,7 +310,8 @@ namespace Pars
         // Stability Criteria
         extern const double phi_s;      // [A] Euler explicit scheme
         extern const double Courant;    // [C] Courant number(C): C = U_inf * dt / sigma, where 0 < C <= 1
-        extern const double Diffusion;  // [C] Diffusion number(Phi): Phi =  NU * dt / sigma^2, where 0 < Phi <= 0.5
+        extern const double Diffusion;  // [C] Diffusion number(Phi): Phi =  NU * dt / sigma^2, where 0 < Phi <= 0.5 [of Phi inr order of one O(1), Ploumhans (2000)]
+        extern const double Vortex;     // [C] Vortex number(Re_h): Re_h =  |omega| * sigma^2 / nu, where Re_h in order of one O(1).
         // extern const double Courant =           // [TYPE 2] sigma = sqrt(dt*vis/phi_s)/Courant, where 0 < Courant <= 1
         //     std::sqrt(dt * vis / phi_s) / sigma;
         

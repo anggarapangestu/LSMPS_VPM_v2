@@ -22,6 +22,15 @@
 */
 #define BASE_NUM_TYPE 2
 
+
+// Flag related to boundary region
+// ===============================
+/** The flag to refine particle near the boundary
+ *   [0] : No boundary refinement
+ *   [1] : Add boundary refinement
+*/
+#define REFINE_BOUNDARY_FLAG 0
+
 // ===================================================== //
 // +------------------- Constructor -------------------+ //
 // ===================================================== //
@@ -90,17 +99,23 @@ void generateGrid::updateGridNode(GridNode& nodeList){
     // Set the length of each direction
     this->length[0] = Pars::lxdom;
     this->length[1] = Pars::lydom;
-    if (DIM == 3) this->length[2] = Pars::lzdom;    // This method is safe from illegal memory access
+    #if (DIM == 3)      // This method is safe from illegal memory access
+    this->length[2] = Pars::lzdom;    
+    #endif
 
     // Set the minimum global coordinate position
     this->minCoor[0] = - Pars::xdom;
     this->minCoor[1] = - Pars::lydom / 2.0;
-    if (DIM == 3) this->minCoor[2] = - Pars::lzdom / 2.0;
+    #if (DIM == 3)
+    this->minCoor[2] = - Pars::lzdom / 2.0;
+    #endif
     
     // Set the maximum global coordinate position
     this->maxCoor[0] = Pars::lxdom - Pars::xdom;
     this->maxCoor[1] = Pars::lydom / 2.0;
-    if (DIM == 3) this->maxCoor[2] = Pars::lzdom / 2.0;
+    #if (DIM == 3)
+    this->maxCoor[2] = Pars::lzdom / 2.0;
+    #endif
 
     // ** Start updating the Grid Node data
     
@@ -114,6 +129,10 @@ void generateGrid::updateGridNode(GridNode& nodeList){
     // Update the domain size (fit with the number of nodes)
     // NOTE*: A symmetrical expansion from original size is performed
     basis_loop(d){
+        // Update the exact domain boundary location
+        nodeList.minDomBound[d] = this->minCoor[d];
+        nodeList.maxDomBound[d] = this->maxCoor[d];
+
         double excess = 0.5 * (nodeList.gridCount[d] * this->rootBlockSize - this->length[d]);
         this->minCoor[d] -= excess;
         this->maxCoor[d] += excess;
@@ -225,6 +244,19 @@ void generateGrid::generateRootDir(GridNode& nodeList) const{
     return;
 }
 
+
+/**
+ *  @brief  [PRIVATE METHOD] A subroutine to generate the boundary particle, 
+ *  based on the generated grid node
+ * 
+ *  @param  particle    The particle data container to add the boundary particle data.
+ *  @param  nodeList    The "GridNode" data for particle generation reference.
+*/
+void generateBoundaryParticle(Particle &particle, const GridNode &nodeList){
+    // Please add your code ...
+    return;
+}
+
 // #pragma endregion
 
 // ===================================================== //
@@ -288,6 +320,11 @@ void generateGrid::nodeGeneration(GridNode& nodeList, const std::vector<Body>& b
     /*/ There are 2 method: 
         [1] store all node ID to be refined, or 
         [2] refine each level at the same time with iteration  <---  Chosen
+
+        <!> An additional subroutine to refine the grid near domain boundary
+        NOTE: 
+        * At the current program, it will refine the grid into the maximum level
+        * Still limited to 2D space simulation !!!
     /*/
 
     // Additional (*To be utilized in PROCEDURE 4)
@@ -524,6 +561,235 @@ void generateGrid::nodeGeneration(GridNode& nodeList, const std::vector<Body>& b
         }
     }
 
+    // START PROCEDURE 3.1:
+    // Refine the grid near boundary
+    // **Future call (Add the patch is boundary node to other corresponding subroutine, also put the bnd eval first)
+    if (REFINE_BOUNDARY_FLAG == 1)
+    {
+        MESSAGE_LOG << "Domain boundary grid refinement\n";
+        /* Refinement description:
+            > Collect all root node adjacent to domain boundary
+            > At each "level check" evaluate the grid adjacent to domain boundary
+            > Refine the node if the distance inside criteria
+        */
+
+        // Internal variable
+        int currLvl = ROOT_LEVEL;       // Current grid level evaluated
+        
+        // A node ID container for distance check (for recursive refinement)
+        std::vector<int> nodeIDList1;               // First node ID container
+        std::vector<int> nodeIDList2;               // Second node ID container
+        std::unordered_map<int, int> bndNodeIDLoc;  // Container to store the boundary node and the boundary label
+
+        // std::unordered_map<int,bool> nodeIDFlag;
+        // std::vector<std::string> boundaryLoc = {"Left", "Right", "Bottom", "Top", "Back", "Front"}; // A reference to the boundary location label
+        // std::vector<int> bndNodeIDList;
+
+        // ** [1] Collecting all ROOT node adjacent to domain boundary
+        int basisCnt[DIM];  // The count of grid in each dimension at current level (ROOT)
+        int totNum = 1;     // The total number of grid in current level (ROOT)
+        // Update the intermediate variable
+        basis_loop(d){
+            int currCnt = nodeList.gridCount[d] * Pars::intPow(2,currLvl);
+            basisCnt[d] = currCnt;
+            totNum *= currCnt;
+        }
+
+        // *Loop for boundary face at each dimension
+        basis_loop(d){
+            // Take the extremes node index on the current dimension evaluation
+            // Then find the node index combination for each boundary node
+
+            // Internal variables
+            int bndExtremes[2] = {0, basisCnt[d]-1};    // The lower and upper bound at current dimension
+            int cmbNum = totNum / basisCnt[d];          // Number of boundary node index combination at the current dimension
+            int label[DIM-1];   // The dimension label list for other than currently evaluated dimension
+            int div[DIM-1];     // The divisor to flatten combination index
+            
+            // Update the dimension label
+            int _ctr = 0;
+            basis_loop(k){
+                if (k == d) continue;
+                else label[_ctr++] = k;
+            }
+            
+            // Update the flatten divisor
+            for (int p = 0; p < DIM - 1; p++){
+                div[p] = 1;
+                for (int k = 0; k < p; k++){
+                    div[p] *= basisCnt[label[k]];
+                }
+            }
+
+            // *Find the index combination of boundary node
+            int bndIdx[DIM];        // Boundary node index candidate
+            int bndID;              // Boundary node ID candidate
+            for (int i = 0; i < cmbNum; i++){
+                // Obtain the other index combination
+                for (int p = 0; p < DIM - 1; p++){
+                    // Alias to the other dimension label
+                    const int &loc = label[p];
+                    // Calculate the other combination
+                    bndIdx[loc] = (i / div[p]) % basisCnt[loc];
+                }
+                
+                // Push the data of lower boundary
+                bndIdx[d] = bndExtremes[0];
+                bndID = nodeList.idx2ID(bndIdx, currLvl);
+                if (bndNodeIDLoc.count(bndID) == 0){
+                    int _loc = 2*d;
+                    nodeIDList1.push_back(bndID);
+                    bndNodeIDLoc.insert({bndID, _loc});
+                }
+
+                // Push the data of upper boundary
+                bndIdx[d] = bndExtremes[1];
+                bndID = nodeList.idx2ID(bndIdx, currLvl);
+                if (bndNodeIDLoc.count(bndID) == 0){
+                    int _loc = 2*d + 1;
+                    nodeIDList1.push_back(bndID);
+                    bndNodeIDLoc.insert({bndID, _loc});
+                }
+            }
+        }
+
+        std::string name = "BND";
+        nodeList.saveSelectedGrid(nodeList, nodeIDList1, name);
+
+        // ** [2] Check the minimum distance of each node toward body
+        // Define the boundary position
+        double* minBound = nodeList.minDomBound;
+        double* maxBound = nodeList.maxDomBound;
+
+        // *Loop to refine the node to finest level
+        for(currLvl = ROOT_LEVEL; currLvl <= nodeList.maxLevel; currLvl++){
+            std::cout << "The iteration at level : " << currLvl << "\n";
+            // Create an alias for each container
+            std::vector<int> *currList;     // Evaluated at current level
+            std::vector<int> *nextList;     // Stored for next level
+            
+            // Alternating the container 1 and 2 as current and next
+            if (currLvl % 2 == 0){
+                currList = &nodeIDList1;
+                nextList = &nodeIDList2;
+            }else {
+                currList = &nodeIDList2;
+                nextList = &nodeIDList1;
+            }
+
+            // Free the next ID list container
+            nextList->clear();
+
+            // LOOP -> Check through all Node
+            for (int &_ID : *currList){
+                // Alias for the current node
+                Node *&_node = nodeList.nodeMap.at(_ID);
+                // Retrieve the boundary location of the node
+                const int &loc = bndNodeIDLoc[_ID];
+                // Get the other boundary location label and parameter
+                const int basis = loc / 2;    // The dimension location (0: in x basis, 1: in y basis, 2: in z basis)
+                const int bound = loc % 2;    // The extremes bound (0: lower bound, 1: upper bound)
+
+                // *** Update the boundary sign
+                _node->isBoundary = true;
+                if (currLvl == nodeList.maxLevel) continue; // Preventing refining a node at max resolution
+
+                // *At current evaluation the current node is already defined as a boundary node so need to be refined
+                std::vector<int> chdIDList;         // Container to store the child ID
+                // Check whether the current node is already refined or not
+                if (_node->isLeaf){
+                    // if (REFINE_BOUNDARY_FLAG == 0) continue;
+                    // Perform the refinement
+                    nodeList.refineNode(_node, nodeList, chdIDList);
+                }else{
+                    chdIDList = nodeList.findChild(_ID);
+                }
+
+                // Evaluate the location of child node
+                for (int &chdID : chdIDList){
+                    // Alias for the current childnode
+                    Node *&_chdNode = nodeList.nodeMap.at(chdID);
+
+                    // Determine the middle point coordinate of the node
+                    std::vector<double> nodePos(DIM);       // Node middle point coordinate
+                    double _radius = 0.5 * _chdNode->length;   // Node half length
+                    basis_loop(d) nodePos[d] = _chdNode->pivCoor[d] + _radius;
+                    
+                    // *** An adjustment to boundary evaluation (check for further issue*)
+                    _radius *= 1.05;
+
+                    // double dist = 0.0;
+                    bool isOutside = false;
+                    // Calculate the minimum distance of node toward domain boundary
+                    if (bound == 0){
+                        // Categorized as lower bound face
+                        if (nodePos[basis] - _radius < minBound[basis]){
+                            isOutside = true;
+                        }else{
+                            // Evaluate for other adjacent boundary (esp. the node at corner)
+                            for (int k = basis+1; k < DIM ; k++){
+                                if (nodePos[k] - _radius < minBound[k]){
+                                    isOutside = true;
+                                    break;
+                                }else if (nodePos[k] + _radius > maxBound[k]){
+                                    isOutside = true;
+                                    break;
+                                }
+                            }
+                        }
+                        
+                        // // Categorized as lower bound face
+                        // dist = std::abs(nodePos[basis] - minBound[basis]);
+                        
+                        // // Evaluate for other adjacent boundary (esp. the node at corner)
+                        // for (int k = basis+1; k < DIM ; k++){
+                        //     dist = std::min(dist, std::abs(nodePos[k] - minBound[k]));
+                        //     dist = std::min(dist, std::abs(nodePos[k] - maxBound[k]));
+                        // }
+                    }else if (bound == 1){
+                        // Categorized as upper bound face
+                        if (nodePos[basis] + _radius > maxBound[basis]){
+                            isOutside = true;
+                        }else{
+                            // Evaluate for other adjacent boundary (esp. the node at corner)
+                            for (int k = basis+1; k < DIM ; k++){
+                                if (nodePos[k] - _radius < minBound[k]){
+                                    isOutside = true;
+                                    break;
+                                }else if (nodePos[k] + _radius > maxBound[k]){
+                                    isOutside = true;
+                                    break;
+                                }
+                            }
+                        }
+                        // dist = std::abs(nodePos[basis] - maxBound[basis]);
+                        
+                        // // Evaluate for other adjacent boundary (esp. the node at corner)
+                        // for (int k = basis+1; k < DIM ; k++){
+                        //     dist = std::min(dist, std::abs(nodePos[k] - minBound[k]));
+                        //     dist = std::min(dist, std::abs(nodePos[k] - maxBound[k]));  
+                        // }
+                    }
+
+                    // * Put the child ID into the corresponding container
+                    if (isOutside == true/*dist < _radius*/){
+                        // Store the child ID into the next ID container
+                        nextList->push_back(chdID);
+                        bndNodeIDLoc.insert({chdID, loc});
+                    }
+                    else if (currLvl + 1 < LEVEL_BOUND){
+                        // For other child that is not included as boundary grid
+                        // Put the ID into queue ID list for NDL evaluation
+                        if (_chdNode->isLeaf && REFINE_BOUNDARY_FLAG == 1){
+                            IDqueue[currLvl + 1].push_back(chdID);
+                            IDflag.insert({chdID, true});
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // // Saving ROOT
     // std::string name = "REFINE";
     // nodeList.saveLeafGrid(nodeList, name);
@@ -576,7 +842,8 @@ void generateGrid::nodeGeneration(GridNode& nodeList, const std::vector<Body>& b
                 // ** [0] Check leaf node
                 if (!(_Node->isLeaf)){
                     // Proceed to the next Node in queue
-                    WARNING_LOG << " NLD check on a non-LEAF node! [CODE:0xNG!!]\n";
+                    // WARNING_LOG << " NLD check on a non-LEAF node! [CODE:0xNG!!]";
+                    // std::cout << "ID[" << _ID << "]" << " level[" << currLvl << "]\n";
                     continue;
                 }
 
@@ -794,6 +1061,10 @@ void generateGrid::createNode(GridNode &_grid, Particle &_par){
         3. Recursively create parent node
     */
 
+    // // Internal variable
+    // double minSigma = Pars::sigma * 4;
+    // double maxSigma = Pars::sigma;
+
     // PROCEDURE 1!
     // ************
     MESSAGE_LOG << "Update grid node parameters\n";
@@ -809,6 +1080,10 @@ void generateGrid::createNode(GridNode &_grid, Particle &_par){
         this->maxCoor[2] = std::max<double>(_par.z[i] + 0.5*_par.s[i], this->maxCoor[2]);
         this->minCoor[2] = std::min<double>(_par.z[i] - 0.5*_par.s[i], this->minCoor[2]);
         }
+
+        // // Determine the global maximum and minimum particle size
+        // if (_par.s[i] > maxSigma) maxSigma = _par.s[i];
+        // if (_par.s[i] < minSigma) minSigma = _par.s[i];
     }
     
     // Calculate the domain size

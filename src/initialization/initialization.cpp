@@ -1,10 +1,170 @@
 #include "initialization.hpp"
 #include "../grid_block/generateGrid.hpp"
 
+#include <bits/stdc++.h>
+
 // ===================================================== //
 // +------------------ Public Method ------------------+ //
 // ===================================================== //
 // #pragma region PUBLIC_METHOD
+
+// Boundary value
+#define BC_LEFT     1       // Left type boundary condition [1:=dirichlet, 2:=neumann]
+#define BC_RIGHT    1       // Right type boundary condition [1:=dirichlet, 2:=neumann]
+#define BC_TOP      1       // Top type boundary condition [1:=dirichlet, 2:=neumann]
+#define BC_BOTTOM   1       // Bottom type boundary condition [1:=dirichlet, 2:=neumann]
+#define VOR_SIGNIFICANCE 1e-4  // The significant value of vorticity
+
+#define GENERATE_RANDOM_SHIFT 1  // The flag to generate a random shift into the calculation
+
+/**
+ *  @brief  [Dummy function]
+*/
+void initialization::initialize_laplace(Particle &_par){
+    /** Procedure:
+     *   [1] Initialize the boundary condition with label below
+     *        -2:= negative y boundary (bottom)
+     *         2:= positive y boundary (top)
+     *        -1:= negative x boundary (left)
+     *         1:= positive x boundary (right)  
+     *   [2] Generate the particle inside domain
+    */
+
+    // Laplace parameter 
+    double V_0 = 10.0;       // The potential at the left side (x=-sx)
+    
+    // PROCEDURE 1!
+    // ***********
+    // Set the location of each boundary
+    // Illustration
+    //    ___
+    //  |     | 
+    //  | ___ |
+    // Each boundary is not necessary close the corner
+
+    // Internal variable
+    double minLoc[DIM];     // The minimum location of x and y
+    double maxLoc[DIM];     // The maximum location of x and y
+    double pivot[DIM];      // The pivot of each boundary
+
+    // Assign the value
+    minLoc[0] = -0.5 * Pars::lxdom;
+    maxLoc[0] = 0.5 * Pars::lxdom;
+    minLoc[1] = -0.5 * Pars::lydom;
+    maxLoc[1] = 0.5 * Pars::lydom;
+
+    // Generate the boundary value
+    int bndCntX = std::ceil(Pars::lxdom / Pars::sigma)+1;    // The number (count) of boundary particle at x side
+    int bndCntY = std::ceil(Pars::lydom / Pars::sigma)-1;    // The number (count) of boundary particle at y side
+    double spaceX = Pars::lxdom / (bndCntX-1);
+    double spaceY = Pars::lydom / (bndCntY+1);
+    // pivot[0] = -0.5*(bndCntX-1)*spaceX;
+    // pivot[1] = -0.5*(bndCntY+1)*spaceY;
+    pivot[0] = minLoc[0];
+    pivot[1] = minLoc[1];
+
+    // Generate the boundary particle
+    // Bottom part (labeled as -2)
+    _par.num += bndCntX;
+    _par.y.resize(_par.num, minLoc[1]);
+    _par.boundaryLoc.resize(_par.num, -2);
+    _par.boundaryVal.resize(_par.num, 0.0);
+    for (int i = 0; i < bndCntX; i++){
+        _par.x.push_back(pivot[0] + i*spaceX);
+        // _par.y.push_back(minLoc[1]);
+        // _par.s.push_back(Pars::sigma);
+        // _par.boundaryLoc.push_back(-2);
+        // _par.boundaryVal.push_back(BC_BOTTOM);
+    }
+
+    // Top part (labeled as 2)
+    _par.num += bndCntX;
+    _par.y.resize(_par.num, maxLoc[1]);
+    _par.boundaryLoc.resize(_par.num, 2);
+    _par.boundaryVal.resize(_par.num, 0.0);
+    for (int i = 0; i < bndCntX; i++){
+        _par.x.push_back(pivot[0] + i*spaceX);
+        // _par.y.push_back(maxLoc[1]);
+        // _par.s.push_back(Pars::sigma);
+        // _par.boundaryLoc.push_back(2);
+        // _par.boundaryVal.push_back(BC_TOP);
+    }
+    
+    // Left part (labeled as -1)
+    _par.num += bndCntY;
+    _par.x.resize(_par.num, minLoc[0]);
+    _par.boundaryLoc.resize(_par.num, -1);
+    _par.boundaryVal.resize(_par.num, 0);
+    for (int i = 0; i < bndCntY; i++){
+        // _par.x.push_back(minLoc[0]);
+        _par.y.push_back(pivot[1] + (1+i)*spaceY);
+        // _par.s.push_back(Pars::sigma);
+        // _par.boundaryLoc.push_back(-1);
+        // _par.boundaryVal.push_back(BC_LEFT);
+    }
+
+    // Right part (labeled as 1)
+    _par.num += bndCntY;
+    _par.x.resize(_par.num, maxLoc[0]);
+    _par.boundaryLoc.resize(_par.num, 1);
+    _par.boundaryVal.resize(_par.num, V_0);
+    for (int i = 0; i < bndCntY; i++){
+        // _par.x.push_back(maxLoc[0]);
+        _par.y.push_back(pivot[1] + (1+i)*spaceY);
+        // _par.s.push_back(Pars::sigma);
+        // _par.boundaryLoc.push_back(1);
+        // _par.boundaryVal.push_back(BC_RIGHT);
+    }
+
+    
+    // PROCEDURE 2!
+    // ***********
+    // Calculate the number of particle in each basis direction
+    bndCntX = std::ceil(Pars::lxdom / Pars::sigma);    // The number (count) of boundary particle at x side
+    bndCntY = std::ceil(Pars::lydom / Pars::sigma);    // The number (count) of boundary particle at y side
+    pivot[0] = -0.5*bndCntX*Pars::sigma;
+    pivot[1] = -0.5*bndCntY*Pars::sigma;
+    int nTot = bndCntX * bndCntY;
+
+    // Update the other properties
+    _par.num += nTot;
+    _par.s.resize(_par.num, Pars::sigma);
+    _par.boundaryLoc.resize(_par.num, 0);
+    _par.boundaryVal.resize(_par.num, 0.0);
+
+    // Initialization for randomization shifting
+    srand(time(0));
+    double Rs = 0.5;
+
+    // Generate the inner side particle
+    for(int j = 0; j < bndCntY; j++){
+        for(int i = 0; i < bndCntX; i++){
+            double x = pivot[0] + (0.5+i)*Pars::sigma;
+            double y = pivot[1] + (0.5+j)*Pars::sigma;
+
+            #if (GENERATE_RANDOM_SHIFT == 1)
+                double phi = ((double)std::rand()) / RAND_MAX;
+                double mul = ((double)std::rand()) / RAND_MAX;
+                double addX = std::cos(2*M_PI*phi) * mul * Rs * Pars::sigma;
+                double addY = std::sin(2*M_PI*phi) * mul * Rs * Pars::sigma;
+                x += addX;
+                y += addY;
+                if (x < minLoc[0] || x > maxLoc[0]){
+                    x -= addX;
+                }
+                if (y < minLoc[1] || y > maxLoc[1]){
+                    y -= addY;
+                }
+            #endif
+
+            _par.x.push_back(x);
+            _par.y.push_back(y);
+        }
+    }
+    
+
+    return;
+}
 
 /**
  *  @brief  Update the flag of particle near the domain boundary.
@@ -12,9 +172,16 @@
  *  @param  _particle  Particle data container.
 */
 void initialization::update_domain_boundary(Particle &_par){
+    // Prompt display
+    std::cout << "Updating the domain boundary ...\n";
+
     // Reserve the flag container data
-    _par.isBoundary = std::vector<bool>(_par.num, false);   // Update the flag size
+    // _par.isBoundary = std::vector<bool>(_par.num, false);   // Update the flag size
+    _par.boundaryLoc = std::vector<int>(_par.num, 0);      // Update the boundary location
     _par.boundaryVal = std::vector<double>(_par.num, 0.0);  // Update the boundary value <!> Still not constructed, define with 0 element <!>
+    
+    _par.vortx = std::vector<double>(_par.num, 0.0);  // Update the boundary value (FOR VELOCITY BC)
+    _par.vorty = std::vector<double>(_par.num, 0.0);  // Update the boundary value (FOR VELOCITY BC)
 
     // Get the domain extremes
     std::vector<double> maxPos(DIM, 0.0);
@@ -36,23 +203,98 @@ void initialization::update_domain_boundary(Particle &_par){
         #endif
     }
 
+    // std::cout << "Size of each value:\n";
+    // std::cout << " > Velocity u: " << _par.gx.size() << "\n";
+    // std::cout << " > Velocity y: " << _par.gy.size() << "\n";
+    // std::cout << " > Vorticity: " << _par.vorticity.size() << "\n";
+
     // Just need to iterate all particle
     for (int i = 0; i < _par.num; i++){
         // Check the location of particle
         // Check in x direction
-        if ((_par.x[i] < (minPos[0] + _par.s[i]/2.0)) ||
-            (_par.x[i] > (maxPos[0] - _par.s[i]/2.0)) )
-        {
-            _par.isBoundary[i] = true;
+        if (_par.x[i] < (minPos[0] + _par.s[i]/2.0)){
+            // LEFT boundary
+            // _par.isBoundary[i] = true;
+            _par.boundaryLoc[i] = -1;
+
+            #if (BC_LEFT == 1)
+                // A Diriclet boundary condition
+                _par.boundaryVal[i] = _par.chi[i];
+                // _par.vortx[i] = _par.gx[i];
+                // _par.vorty[i] = _par.gy[i];
+            #elif (BC_LEFT == 2)
+                // A Neumann boundary condition
+                // _par.boundaryVal[i] = _par.gx[i];
+                _par.boundaryVal[i] = -_par.gy[i];
+                // _par.vortx[i] = _par.dudx[i];
+                // _par.vorty[i] = _par.dvdx[i];
+            #endif
+        }
+        else if(_par.x[i] > (maxPos[0] - _par.s[i]/2.0)){
+            // RIGHT boundary
+            // _par.isBoundary[i] = true;
+            // if (std::abs(_par.vorticity[i]) < VOR_SIGNIFICANCE){
+                _par.boundaryLoc[i] = 1;
+                
+                #if (BC_RIGHT == 1)
+                    // A Diriclet boundary condition
+                    _par.boundaryVal[i] = _par.chi[i];
+                    // _par.vortx[i] = _par.gx[i];
+                    // _par.vorty[i] = _par.gy[i];
+                #elif (BC_RIGHT == 2)
+                    // A Neumann boundary condition
+                    // _par.boundaryVal[i] = _par.gx[i];
+                    _par.boundaryVal[i] = -_par.gy[i];
+                    // _par.vortx[i] = _par.dudx[i];
+                    // _par.vorty[i] = _par.dvdx[i];
+                #endif
+            // }
         }
         
         // Check in y direction
-        if ((_par.y[i] < (minPos[1] + _par.s[i]/2.0)) ||
-            (_par.y[i] > (maxPos[1] - _par.s[i]/2.0)) )
-        {
-            _par.isBoundary[i] = true;
+        if (_par.y[i] > (maxPos[1] - _par.s[i]/2.0)){
+            // TOP boundary
+            // _par.isBoundary[i] = true;
+            // if (std::abs(_par.vorticity[i]) < VOR_SIGNIFICANCE){
+                _par.boundaryLoc[i] = 2;
+                
+                #if (BC_TOP == 1)
+                    // A Diriclet boundary condition
+                    _par.boundaryVal[i] = _par.chi[i];
+                    // _par.vortx[i] = _par.gx[i];
+                    // _par.vorty[i] = _par.gy[i];
+                #elif (BC_TOP == 2)
+                    // A Neumann boundary condition
+                    // _par.boundaryVal[i] = _par.gy[i];
+                    _par.boundaryVal[i] = _par.gx[i];
+                    // _par.vortx[i] = _par.dudy[i];
+                    // _par.vorty[i] = _par.dvdy[i];
+                #endif
+            // }
+        }
+        else if( _par.y[i] < (minPos[1] + _par.s[i]/2.0)){
+            // BOTTOM boundary
+            // _par.isBoundary[i] = true;
+            // if (std::abs(_par.vorticity[i]) < VOR_SIGNIFICANCE){
+                _par.boundaryLoc[i] = -2;
+                
+                #if (BC_BOTTOM == 1)
+                    // A Diriclet boundary condition
+                    _par.boundaryVal[i] = _par.chi[i];
+                    // _par.vortx[i] = _par.gx[i];
+                    // _par.vorty[i] = _par.gy[i];
+                #elif (BC_BOTTOM == 2)
+                    // A Neumann boundary condition
+                    // _par.boundaryVal[i] = _par.gy[i];
+                    _par.boundaryVal[i] = _par.gx[i];
+                    // _par.vortx[i] = _par.dudy[i];
+                    // _par.vorty[i] = _par.dvdy[i];
+                #endif
+            // }
         }
     }
+
+    std::cout << "Done updating domain boundary ...\n";
 
     return;
 }
@@ -153,12 +395,19 @@ void initialization::initialize_vorticity(Particle &_par){
 
     // Vorticity field type selection
     switch (Pars::opt_init_vorticity){
+    case 0: // No vorticity
+        printf("%sNo Vortiticy Initialization!%s\n", FONT_CYAN, FONT_RESET);
+        break;
     case 1: // Perlman vorticity
         printf("%sType 1: Perlman vorticity%s\n", FONT_CYAN, FONT_RESET);
         this->perlman_vorticity(_par);
         this->perlman_velocity_solution(_par);
         break;
     case 2: // Reserve ...
+        printf("%sType 2: Eliptical vorticity ... %s\n", FONT_CYAN, FONT_RESET);
+        this->eliptic_vorticity(_par);
+        break;
+    case 3: // Reserve ...
         printf("%sType 2: Reserved ... %s\n", FONT_CYAN, FONT_RESET);
         // this->perlman_vorticity(_par);
         break;
@@ -166,6 +415,22 @@ void initialization::initialize_vorticity(Particle &_par){
         break;
     }
 
+    // **Find the maximum vorticity
+    double vor_max = 0.0e0;
+    for (int i = 0; i < _par.num; i++){
+        if (std::abs(_par.vorticity[i]) > vor_max)
+        vor_max = std::abs(_par.vorticity[i]);
+    }
+
+    // **Evaluate the active flag particle
+    _par.isActive.clear();_par.isActive.resize(_par.num,false);
+    double SIGNIFICANCE_LIMIT = Pars::active_sig*vor_max;
+    // #pragma omp parallel for
+    for (int i = 0; i < _par.num; i++){
+        double vor = std::abs(_par.vorticity[i]);
+        _par.isActive[i] = (vor >= SIGNIFICANCE_LIMIT) ? true : false;
+    }
+    
     // Vorticity generation summary time display
     #if (TIMER_PAR == 0)
         // Timer using super clock (chrono)
@@ -583,6 +848,19 @@ void initialization::read_3d_particle(Particle &_par, int _iter){
 // +---------------- Grid Block Method ----------------+ //
 // ===================================================== //
 // #pragma region GRID_BLOCK_METHOD
+
+/** Exactly cut the particle outside the defined domain
+ *   [0] : Leave as it is
+ *   [1] : Trim the particle outside the defined domain
+*/
+#define TRIM_DOMAIN_FLAG 0
+
+/** The flag to add boundary particle
+ *   [0] : No boundary particle
+ *   [1] : Add boundary particle
+*/
+
+#define ADD_BOUNDARY_PARTICLE_FLAG 0
 /**
  *  @brief  Particle generator using grid block method.
  *         
@@ -627,34 +905,101 @@ void initialization::init_par_grid_block(Particle &par, const std::vector<Body> 
     for (auto &[_ID, _node] : _gridNode.nodeMap){
         // Only do particle generation to leaf node
         if (_node->isLeaf){
-            // Calculate shared properties of particle inside the current node
-            double _parSize = _node->length / _gridNode.baseParNum;
+            #if TRIM_DOMAIN_FLAG == 1
+                // Calculate shared properties of particle inside the current node
+                double _parSize = _node->length / _gridNode.baseParNum;
+                if (_node->isBoundary == true){
+                    // Generate all particle inside the curren Node
+                    for (int _locID = 0; _locID < _parNum; _locID++){
+                        // Calculate local index coordinate inside the node from local ID
+                        basis_loop(d) _parIndex[d] = (_locID/_div[d]) % _gridNode.baseParNum;
 
-            // Generate all particle inside the curren Node
-            for (int _locID = 0; _locID < _parNum; _locID++){
-                // Calculate local index coordinate inside the node from local ID
-                basis_loop(d) _parIndex[d] = (_locID/_div[d]) % _gridNode.baseParNum;
+                        // Calculate all particle position
+                            double _x = _node->pivCoor[0] + (0.5 + _parIndex[0])*_parSize;
+                            if (_x > _gridNode.maxDomBound[0] || _x < _gridNode.minDomBound[0]) continue;
+                        #if (DIM > 1)
+                            double _y = _node->pivCoor[1] + (0.5 + _parIndex[1])*_parSize;
+                            if (_y > _gridNode.maxDomBound[1] || _y < _gridNode.minDomBound[1]) continue;
+                        #endif
+                        #if (DIM > 2)
+                            double _z = _node->pivCoor[2] + (0.5 + _parIndex[2])*_parSize;
+                            if (_z > _gridNode.maxDomBound[2] || _z < _gridNode.minDomBound[2]) continue;
+                        #endif
+                        
+                        // Update the location
+                            par.x.push_back(_x);
+                        #if (DIM > 1)
+                            par.y.push_back(_y);
+                        #endif
+                        #if (DIM > 2)
+                            par.z.push_back(_z);
+                        #endif
 
-                // Assign the particle position
-                double _x = _node->pivCoor[0] + (0.5 + _parIndex[0])*_parSize;
-                par.x.push_back(_x);
-                if (DIM>1) {
-                    double _y = _node->pivCoor[1] + (0.5 + _parIndex[1])*_parSize;
-                    par.y.push_back(_y);
+                        // Assign other data
+                        par.nodeID.push_back(_node->nodeID);
+                        par.level.push_back(_node->level);
+                        par.s.push_back(_parSize);
+
+                        // Insert the current particle ID into the corresponding node
+                        _node->parList.push_back(parID++);
+                    }
+                }else{
+                    // Generate all particle inside the curren Node
+                    for (int _locID = 0; _locID < _parNum; _locID++){
+                        // Calculate local index coordinate inside the node from local ID
+                        basis_loop(d) _parIndex[d] = (_locID/_div[d]) % _gridNode.baseParNum;
+
+                        // Assign the particle position
+                        double _x = _node->pivCoor[0] + (0.5 + _parIndex[0])*_parSize;
+                        par.x.push_back(_x);
+                        if (DIM>1) {
+                            double _y = _node->pivCoor[1] + (0.5 + _parIndex[1])*_parSize;
+                            par.y.push_back(_y);
+                        }
+                        if (DIM>2) {
+                            double _z = _node->pivCoor[2] + (0.5 + _parIndex[2])*_parSize;
+                            par.z.push_back(_z);
+                        }
+
+                        // Assign other data
+                        par.nodeID.push_back(_node->nodeID);
+                        par.level.push_back(_node->level);
+                        par.s.push_back(_parSize);
+
+                        // Insert the current particle ID into the corresponding node
+                        _node->parList.push_back(parID++);
+                    }
                 }
-                if (DIM>2) {
-                    double _z = _node->pivCoor[2] + (0.5 + _parIndex[2])*_parSize;
-                    par.z.push_back(_z);
+            #else
+                // Calculate shared properties of particle inside the current node
+                double _parSize = _node->length / _gridNode.baseParNum;
+
+                // Generate all particle inside the curren Node
+                for (int _locID = 0; _locID < _parNum; _locID++){
+                    // Calculate local index coordinate inside the node from local ID
+                    basis_loop(d) _parIndex[d] = (_locID/_div[d]) % _gridNode.baseParNum;
+
+                    // Assign the particle position
+                    double _x = _node->pivCoor[0] + (0.5 + _parIndex[0])*_parSize;
+                    par.x.push_back(_x);
+                    if (DIM>1) {
+                        double _y = _node->pivCoor[1] + (0.5 + _parIndex[1])*_parSize;
+                        par.y.push_back(_y);
+                    }
+                    if (DIM>2) {
+                        double _z = _node->pivCoor[2] + (0.5 + _parIndex[2])*_parSize;
+                        par.z.push_back(_z);
+                    }
+
+                    // Assign other data
+                    par.nodeID.push_back(_node->nodeID);
+                    par.level.push_back(_node->level);
+                    par.s.push_back(_parSize);
+
+                    // Insert the current particle ID into the corresponding node
+                    _node->parList.push_back(parID++);
                 }
-
-                // Assign other data
-                par.nodeID.push_back(_node->nodeID);
-                par.level.push_back(_node->level);
-                par.s.push_back(_parSize);
-
-                // Insert the current particle ID into the corresponding node
-                _node->parList.push_back(parID++);
-            }
+            #endif
         }
     }
 

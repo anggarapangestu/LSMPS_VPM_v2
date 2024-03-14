@@ -46,7 +46,7 @@ template <typename U> using vec = std::vector<U>;
 #define LSMPS_TYPE 1
 
 /** The global matrix construction type
- *   1:= Sparse Matrix, 
+ *   1:= Sparse Matrixw, 
  *   2:= Dense Matrix
 */
 #define MATRIX_BASIS 1
@@ -60,6 +60,17 @@ template <typename U> using vec = std::vector<U>;
  *   4:= BiCGStab Method     |  *-;
 */
 #define MATRIX_SOLVER 1
+
+/** Boundary condtion type
+ *   0:= No Boundary
+ *   1:= Dirichlet
+ *   2:= Neumann
+*/
+
+#define BC_TYPE_LEFT    1   // Left boundary condtion type
+#define BC_TYPE_RIGHT   1   // Right boundary condtion type
+#define BC_TYPE_TOP     1   // Top boundary condtion type
+#define BC_TYPE_BOTTOM  1   // Bottom boundary condtion type
 
 // =====================================================
 // +---------------- Class Constructor ----------------+
@@ -135,6 +146,588 @@ vec<double> PoissonLSMPS::get_p(const double &xij, const double &yij, const doub
 
     return _p;
 }
+
+
+/**
+ *  @brief A global matrix construction based on LSMPS type A.
+ *  
+ *  @param  ID_i Current evaluated particle ID.
+ *  @param  coords The particle coordinate container.
+ *  @param  nghList  The neighbor list.
+ *  @param  size The particle size container.
+ */
+void PoissonLSMPS::matrix_const_LSMPS_A(
+    const int &idxi,
+    const vec<vec<double>> &pos,
+    const vec<int> &ngh,
+    const vec<double> &s
+){
+    // Particle coordinate alias
+    const double &_xi = pos[0].at(idxi);
+    const double &_yi = pos[1].at(idxi);
+
+    // Intermediate variable
+    // const vec<int> &ngh = nghList[idxi];    // Neighbor list of the current idxi particle
+    const double &_rs = s[idxi];            // Scaling size (the size of evaluated particle)
+    const int nghNum = ngh.size();          // The number of neighbor particle
+    std::vector<bool> notNeighbor(nghNum, false);   // Neighbor flag container
+        
+    // Initialize the LSMPS matrices container
+    MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D_A, BASE_SIZE_2D_A);   // Scaling matrix
+    MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D_A, BASE_SIZE_2D_A);   // Moment matrix
+    VectorXd bi = VectorXd::Zero(BASE_SIZE_2D_A);                     // A vector collection of moment vector
+    vec<VectorXd> bbar = vec<VectorXd>(nghNum, VectorXd::Zero(BASE_SIZE_2D_A));   // Moment vector (separated for each neighbor)
+
+    // A vector of global matrix element calculation
+    VectorXd K {{0, 0, 1, 0, 1}};
+
+    // Initialize H_rs Matrix
+    Hbar(0, 0) = std::pow(_rs, -1);       // Dx(f)  | First order in x (1,0)
+    Hbar(1, 1) = std::pow(_rs, -1);       // Dy(f)  | First order in y (0,1)
+    Hbar(2, 2) = std::pow(_rs, -2) * 2;   // Dx2(f) | Second order in x (2,0)
+    Hbar(3, 3) = std::pow(_rs, -2);       // Dxy(f) | First in x,y (1,1)
+    Hbar(4, 4) = std::pow(_rs, -2) * 2;   // Dy2(f) | Second order in y (0,2)
+
+    // Calculate the moment matrix [Mbar] and vector [bbar]
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Aliasing the neighbor particle ID
+        const int &idxj = ngh[j];
+
+        // No effect from the current neighbor (or neighbor outside the support domain)
+        if (idxi == idxj){
+            notNeighbor[j] = true;
+            continue;
+        }
+        
+        // Neighbor particle coordinate alias
+        const double &_xj = pos[0].at(idxj);
+        const double &_yj = pos[1].at(idxj);
+        
+        // Coordinate distance
+        double _dx = _xj - _xi;
+        double _dy = _yj - _yi;
+
+        // Resultant distance(_rij) and effective radius(_Re)
+        double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
+        double _Re;
+        switch (INTERACTION_TYPE){
+        case 1: // Effective radius type 1 (self particle size)
+            _Re = RADIUS_FACTOR_2D * s[idxi];
+            break;
+        case 2: // Effective radius type 2 (average particle size)
+            _Re = RADIUS_FACTOR_2D * (s[idxi] + s[idxj]) * 0.5;
+            break;
+        default:
+            break;
+        }
+
+        // No effect from the current neighbor (or neighbor outside the support domain)
+        if (_rij > _Re){
+            notNeighbor[j] = true;
+            continue;
+        }
+
+        // Calculate the weight value
+        double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
+        // _wij *= std::pow(s[idxj]/s[idxi], 2.0);             // Add the relative size factor between particle (area ratio of ngh to curr) [Cause more error]
+        
+        // Calculate the distance vector p
+        const vec<double> _P = this->get_p(_dx, _dy, _rs);
+
+        // Calculation of moment matrix Mbar and bbar
+        for (int k1 = 0; k1 < BASE_SIZE_2D_A; k1++){
+            for (int k2 = 0; k2 < BASE_SIZE_2D_A; k2++){
+                // Generate tensor product between p
+                Mbar(k1, k2) += (_wij * _P[k1] * _P[k2]);
+            }
+            
+            // Calculate the vector matrix
+            bi(k1) += _wij * _P[k1];
+
+            // Generate moment matrix for each neighbor
+            bbar[j](k1) = _wij * _P[k1];
+        }
+    }
+    
+    // Inverse the moment matrix
+    // --- Method 0 ---     Standard Matrix Inverse
+    // MatrixXd MbarInv = Mbar.inverse();
+    // --- Method 1 ---     LU Decomposition
+    MatrixXd MbarInv = Mbar.lu().inverse();     // LU is the best (fast and not much error for small matrix [6x6])
+    // --- Method 2 ---     House Holder QR 
+    // VectorXd MbarInv = Mbar.fullPivHouseholderQr().inverse();
+    
+    // Calculate the matrix product
+    MatrixXd Hrs_MbarInv = Hbar * MbarInv;
+    
+    // Calculate the global matrix component affected by the current particle and each neighbor
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Exception for ID that is not classified as neighbor
+        if (notNeighbor[j] == true) continue;
+
+        // Aliasing the particle ID
+        const int &idxj = ngh[j];   // Neighbor particle ID
+        
+        // Calculation of the matrix element
+        VectorXd Coef = Hrs_MbarInv * bbar[j];  // Coefficient addition of dx^2 and dy^2 part
+        double elm = Coef(2) + Coef(4);         // The addition of dx^2 and dy^2 part
+        // double elm = K.transpose()*Coef;         // The addition of dx^2 and dy^2 part
+
+        // Assign the data into container
+        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+            this->tripletList.push_back(Triplet<double>(idxi, idxj, elm));
+        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+            this->A_dense(idxi, idxj) = elm;
+        #endif
+    }
+
+    // Additional for the current element only
+    {
+        VectorXd Coef = Hrs_MbarInv * bi;   // Coefficient addition of dx^2 and dy^2 part
+        double elm = Coef(2) + Coef(4);     // The addition of dx^2 and dy^2 part
+        // double elm = K.transpose()*Coef;         // The addition of dx^2 and dy^2 part
+
+        // Assign the data into container
+        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+            this->tripletList.push_back(Triplet<double>(idxi, idxi, -elm));
+        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+            this->A_dense(idxi, idxi) = -elm;
+        #endif
+    }
+    return;
+}
+
+/**
+ *  @brief A global matrix construction based on LSMPS type B.
+ *  
+ *  @param  ID_i Current evaluated particle ID.
+ *  @param  coords The particle coordinate container.
+ *  @param  nghList  The neighbor list.
+ *  @param  size The particle size container.
+ */
+void PoissonLSMPS::matrix_const_LSMPS_B(
+    const int &idxi,
+    const vec<vec<double>> &pos,
+    const vec<int> &ngh,
+    const vec<double> &s
+){
+    // Particle coordinate alias
+    const double &_xi = pos[0].at(idxi);
+    const double &_yi = pos[1].at(idxi);
+
+    // Intermediate variable
+    // const vec<int> &ngh = nghList[idxi];    // Neighbor list of the current idxi particle
+    const double &_rs = s[idxi];            // Scaling size (the size of evaluated particle)
+    const int nghNum = ngh.size();          // The number of neighbor particle
+    std::vector<bool> notNeighbor(nghNum, false);   // Neighbor flag container
+        
+    // Initialize the LSMPS matrices container
+    MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D_B, BASE_SIZE_2D_B);   // Scaling matrix
+    MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D_B, BASE_SIZE_2D_B);   // Moment matrix
+    vec<VectorXd> bbar = vec<VectorXd>(nghNum, VectorXd::Zero(BASE_SIZE_2D_B));   // Moment vector (separated for each neighbor)
+
+    // A vector of global matrix element calculation
+    VectorXd K {{0, 0, 0, 1, 0, 1}};
+
+    // Initialize H_rs Matrix
+    Hbar(0, 0) = 1;                       // D(f)   | Zero order (0,0)
+    Hbar(1, 1) = std::pow(_rs, -1);       // Dx(f)  | First order in x (1,0)
+    Hbar(2, 2) = std::pow(_rs, -1);       // Dy(f)  | First order in y (0,1)
+    Hbar(3, 3) = std::pow(_rs, -2) * 2;   // Dx2(f) | Second order in x (2,0)
+    Hbar(4, 4) = std::pow(_rs, -2);       // Dxy(f) | First in x,y (1,1)
+    Hbar(5, 5) = std::pow(_rs, -2) * 2;   // Dy2(f) | Second order in y (0,2)
+
+    // Calculate the moment matrix [Mbar] and vector [bbar]
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Aliasing the neighbor particle ID
+        const int &idxj = ngh[j];
+        
+        // Neighbor particle coordinate alias
+        const double &_xj = pos[0].at(idxj);
+        const double &_yj = pos[1].at(idxj);
+        
+        // Coordinate distance
+        double _dx = _xj - _xi;
+        double _dy = _yj - _yi;
+
+        // Resultant distance(_rij) and effective radius(_Re)
+        double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
+        double _Re;
+        switch (INTERACTION_TYPE){
+        case 1: // Effective radius type 1 (self particle size)
+            _Re = RADIUS_FACTOR_2D * s[idxi];
+            break;
+        case 2: // Effective radius type 2 (average particle size)
+            _Re = RADIUS_FACTOR_2D * (s[idxi] + s[idxj]) * 0.5;
+            break;
+        default:
+            break;
+        }
+
+        // No effect from the current neighbor (or neighbor outside the support domain)
+        if (_rij > _Re){
+            notNeighbor[j] = true;
+            continue;
+        }
+
+        // Calculate the weight value
+        double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
+        // _wij *= std::pow(s[idxj]/s[idxi], 2.0);             // Add the relative size factor between particle (area ratio of ngh to curr)
+        
+        // Calculate the distance vector p
+        const vec<double> _P = this->get_p(_dx, _dy, _rs);
+
+        // Calculation of moment matrix Mbar and bbar
+        for (int k1 = 0; k1 < BASE_SIZE_2D_B; k1++){
+            for (int k2 = 0; k2 < BASE_SIZE_2D_B; k2++){
+                // Generate tensor product between p
+                Mbar(k1, k2) += (_wij * _P[k1] * _P[k2]);
+            }
+            // Generate moment matrix for each neighbor
+            bbar[j](k1) = _wij * _P[k1];
+        }
+    }
+    
+    // Inverse the moment matrix
+    // --- Method 0 ---     Standard Matrix Inverse
+    // MatrixXd MbarInv = Mbar.inverse();
+    // --- Method 1 ---     LU Decomposition
+    MatrixXd MbarInv = Mbar.lu().inverse();
+    // --- Method 2 ---     House Holder QR 
+    // VectorXd MbarInv = Mbar.fullPivHouseholderQr().inverse();
+    
+    // Calculate the matrix product
+    MatrixXd Hrs_MbarInv = Hbar * MbarInv;
+    
+    // Calculate the global matrix component affected by the current particle and each neighbor
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Exception for ID that is not classified as neighbor
+        if (notNeighbor[j] == true) continue;
+
+        // Aliasing the particle ID
+        const int &idxj = ngh[j];   // Neighbor particle ID
+        
+        // Calculation of the matrix element
+        VectorXd Coef = Hrs_MbarInv * bbar[j];  // Coefficient addition of dx^2 and dy^2 part
+        double elm = Coef(3) + Coef(5);         // The addition of dx^2 and dy^2 part
+        // double elm = K.transpose()*Coef;         // The addition of dx^2 and dy^2 part
+
+        // Assign the data into container
+        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+            this->tripletList.push_back(Triplet<double>(idxi, idxj, elm));
+        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+            this->A_dense(idxi, idxj) = elm;
+        #endif
+    }
+    return;
+}
+
+/**
+ *  @brief A global matrix construction of neumann boundary condition
+ *  based on LSMPS type A.
+ *  
+ *  @param  ID_i Current evaluated particle ID.
+ *  @param  coords The particle coordinate container.
+ *  @param  nghList  The neighbor list.
+ *  @param  size The particle size container.
+ *  @param  type The differential of neumann. [1:= Differential in x, 2:= Differential in y]
+ */
+void PoissonLSMPS::matrix_const_neumann_A(
+    const int &idxi,
+    const vec<vec<double>> &pos,
+    const vec<int> &ngh,
+    const vec<double> &s,
+    const int& type
+){
+    // Particle coordinate alias
+    const double &_xi = pos[0].at(idxi);
+    const double &_yi = pos[1].at(idxi);
+
+    // Intermediate variable
+    // const vec<int> &ngh = nghList[idxi];    // Neighbor list of the current idxi particle
+    const double &_rs = s[idxi];            // Scaling size (the size of evaluated particle)
+    const int nghNum = ngh.size();          // The number of neighbor particle
+    std::vector<bool> notNeighbor(nghNum, false);   // Neighbor flag container
+        
+    // Initialize the LSMPS matrices container
+    MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D_A, BASE_SIZE_2D_A);   // Scaling matrix
+    MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D_A, BASE_SIZE_2D_A);   // Moment matrix
+    VectorXd bi = VectorXd::Zero(BASE_SIZE_2D_A);                     // A vector collection of moment vector
+    vec<VectorXd> bbar = vec<VectorXd>(nghNum, VectorXd::Zero(BASE_SIZE_2D_A));   // Moment vector (separated for each neighbor)
+
+    // A vector of global matrix element calculation
+    VectorXd K {{1, 1, 0, 0, 0}};
+    if (type == 1){
+        // Differential in x
+        K(0) = 1;
+        K(1) = 0;
+    }else if (type == 2){
+        // Differential in y
+        K(0) = 0;
+        K(1) = 1;
+    }
+
+    // Initialize H_rs Matrix
+    Hbar(0, 0) = std::pow(_rs, -1);       // Dx(f)  | First order in x (1,0)
+    Hbar(1, 1) = std::pow(_rs, -1);       // Dy(f)  | First order in y (0,1)
+    Hbar(2, 2) = std::pow(_rs, -2) * 2;   // Dx2(f) | Second order in x (2,0)
+    Hbar(3, 3) = std::pow(_rs, -2);       // Dxy(f) | First in x,y (1,1)
+    Hbar(4, 4) = std::pow(_rs, -2) * 2;   // Dy2(f) | Second order in y (0,2)
+
+    // Calculate the moment matrix [Mbar] and vector [bbar]
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Aliasing the neighbor particle ID
+        const int &idxj = ngh[j];
+
+        // No effect from the current neighbor (or neighbor outside the support domain)
+        if (idxi == idxj){
+            notNeighbor[j] = true;
+            continue;
+        }
+        
+        // Neighbor particle coordinate alias
+        const double &_xj = pos[0].at(idxj);
+        const double &_yj = pos[1].at(idxj);
+        
+        // Coordinate distance
+        double _dx = _xj - _xi;
+        double _dy = _yj - _yi;
+
+        // Resultant distance(_rij) and effective radius(_Re)
+        double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
+        double _Re;
+        switch (INTERACTION_TYPE){
+        case 1: // Effective radius type 1 (self particle size)
+            _Re = RADIUS_FACTOR_2D * s[idxi];
+            break;
+        case 2: // Effective radius type 2 (average particle size)
+            _Re = RADIUS_FACTOR_2D * (s[idxi] + s[idxj]) * 0.5;
+            break;
+        default:
+            break;
+        }
+
+        // No effect from the current neighbor (or neighbor outside the support domain)
+        if (_rij > _Re){
+            notNeighbor[j] = true;
+            continue;
+        }
+
+        // Calculate the weight value
+        double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
+        // _wij *= std::pow(s[idxj]/s[idxi], 2.0);             // Add the relative size factor between particle (area ratio of ngh to curr) [Cause more error]
+        
+        // Calculate the distance vector p
+        const vec<double> _P = this->get_p(_dx, _dy, _rs);
+
+        // Calculation of moment matrix Mbar and bbar
+        for (int k1 = 0; k1 < BASE_SIZE_2D_A; k1++){
+            for (int k2 = 0; k2 < BASE_SIZE_2D_A; k2++){
+                // Generate tensor product between p
+                Mbar(k1, k2) += (_wij * _P[k1] * _P[k2]);
+            }
+            
+            // Calculate the vector matrix
+            bi(k1) += _wij * _P[k1];
+
+            // Generate moment matrix for each neighbor
+            bbar[j](k1) = _wij * _P[k1];
+        }
+    }
+    
+    // Inverse the moment matrix
+    // --- Method 0 ---     Standard Matrix Inverse
+    // MatrixXd MbarInv = Mbar.inverse();
+    // --- Method 1 ---     LU Decomposition
+    MatrixXd MbarInv = Mbar.lu().inverse();     // LU is the best (fast and not much error for small matrix [6x6])
+    // --- Method 2 ---     House Holder QR 
+    // VectorXd MbarInv = Mbar.fullPivHouseholderQr().inverse();
+    
+    // Calculate the matrix product
+    MatrixXd Hrs_MbarInv = Hbar * MbarInv;
+    
+    // Calculate the global matrix component affected by the current particle and each neighbor
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Exception for ID that is not classified as neighbor
+        if (notNeighbor[j] == true) continue;
+
+        // Aliasing the particle ID
+        const int &idxj = ngh[j];   // Neighbor particle ID
+        
+        // Calculation of the matrix element
+        VectorXd Coef = Hrs_MbarInv * bbar[j];  // Coefficient addition of dx^2 and dy^2 part
+        // double elm = Coef(0) + Coef(1);         // The addition of dx^2 and dy^2 part
+        double elm = K.transpose() * Coef;         // The addition of dx^2 and dy^2 part
+
+        // Assign the data into container
+        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+            this->tripletList.push_back(Triplet<double>(idxi, idxj, elm));
+        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+            this->A_dense(idxi, idxj) = elm;
+        #endif
+    }
+
+    // Additional for the current element only
+    {
+        VectorXd Coef = Hrs_MbarInv * bi;   // Coefficient addition of dx^2 and dy^2 part
+        // double elm = Coef(0) + Coef(1);     // The addition of dx^2 and dy^2 part
+        double elm = K.transpose() * Coef;         // The addition of dx^2 and dy^2 part
+
+        // Assign the data into container
+        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+            this->tripletList.push_back(Triplet<double>(idxi, idxi, -elm));
+        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+            this->A_dense(idxi, idxi) = -elm;
+        #endif
+    }
+    return;
+}
+
+/**
+ *  @brief A global matrix construction of neumann boundary condition
+ *  based on LSMPS type B.
+ *  
+ *  @param  ID_i Current evaluated particle ID.
+ *  @param  coords The particle coordinate container.
+ *  @param  nghList  The neighbor list.
+ *  @param  size The particle size container.
+ *  @param  type The differential of neumann. [1:= Differential in x, 2:= Differential in y]
+ */
+void PoissonLSMPS::matrix_const_neumann_B(
+    const int &idxi,
+    const vec<vec<double>> &pos,
+    const vec<int> &ngh,
+    const vec<double> &s,
+    const int& type
+){
+    // Particle coordinate alias
+    const double &_xi = pos[0].at(idxi);
+    const double &_yi = pos[1].at(idxi);
+
+    // Intermediate variable
+    // const vec<int> &ngh = nghList[idxi];    // Neighbor list of the current idxi particle
+    const double &_rs = s[idxi];            // Scaling size (the size of evaluated particle)
+    const int nghNum = ngh.size();          // The number of neighbor particle
+    std::vector<bool> notNeighbor(nghNum, false);   // Neighbor flag container
+        
+    // Initialize the LSMPS matrices container
+    MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D_B, BASE_SIZE_2D_B);   // Scaling matrix
+    MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D_B, BASE_SIZE_2D_B);   // Moment matrix
+    vec<VectorXd> bbar = vec<VectorXd>(nghNum, VectorXd::Zero(BASE_SIZE_2D_B));   // Moment vector (separated for each neighbor)
+
+    // A vector of global matrix element calculation
+    VectorXd K {{0, 1, 1, 0, 0, 0}};
+    if (type == 1){
+        // Differential in x
+        K(1) = 1;
+        K(2) = 0;
+    }else if (type == 2){
+        // Differential in y
+        K(1) = 0;
+        K(2) = 1;
+    }
+
+    // Initialize H_rs Matrix
+    Hbar(0, 0) = 1;                       // D(f)   | Zero order (0,0)
+    Hbar(1, 1) = std::pow(_rs, -1);       // Dx(f)  | First order in x (1,0)
+    Hbar(2, 2) = std::pow(_rs, -1);       // Dy(f)  | First order in y (0,1)
+    Hbar(3, 3) = std::pow(_rs, -2) * 2;   // Dx2(f) | Second order in x (2,0)
+    Hbar(4, 4) = std::pow(_rs, -2);       // Dxy(f) | First in x,y (1,1)
+    Hbar(5, 5) = std::pow(_rs, -2) * 2;   // Dy2(f) | Second order in y (0,2)
+
+    // Calculate the moment matrix [Mbar] and vector [bbar]
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Aliasing the neighbor particle ID
+        const int &idxj = ngh[j];
+        
+        // Neighbor particle coordinate alias
+        const double &_xj = pos[0].at(idxj);
+        const double &_yj = pos[1].at(idxj);
+        
+        // Coordinate distance
+        double _dx = _xj - _xi;
+        double _dy = _yj - _yi;
+
+        // Resultant distance(_rij) and effective radius(_Re)
+        double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
+        double _Re;
+        switch (INTERACTION_TYPE){
+        case 1: // Effective radius type 1 (self particle size)
+            _Re = RADIUS_FACTOR_2D * s[idxi];
+            break;
+        case 2: // Effective radius type 2 (average particle size)
+            _Re = RADIUS_FACTOR_2D * (s[idxi] + s[idxj]) * 0.5;
+            break;
+        default:
+            break;
+        }
+
+        // No effect from the current neighbor (or neighbor outside the support domain)
+        if (_rij > _Re){
+            notNeighbor[j] = true;
+            continue;
+        }
+
+        // Calculate the weight value
+        double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
+        // _wij *= std::pow(s[idxj]/s[idxi], 2.0);             // Add the relative size factor between particle (area ratio of ngh to curr)
+        
+        // Calculate the distance vector p
+        const vec<double> _P = this->get_p(_dx, _dy, _rs);
+
+        // Calculation of moment matrix Mbar and bbar
+        for (int k1 = 0; k1 < BASE_SIZE_2D_B; k1++){
+            for (int k2 = 0; k2 < BASE_SIZE_2D_B; k2++){
+                // Generate tensor product between p
+                Mbar(k1, k2) += (_wij * _P[k1] * _P[k2]);
+            }
+            // Generate moment matrix for each neighbor
+            bbar[j](k1) = _wij * _P[k1];
+        }
+    }
+    
+    // Inverse the moment matrix
+    // --- Method 0 ---     Standard Matrix Inverse
+    // MatrixXd MbarInv = Mbar.inverse();
+    // --- Method 1 ---     LU Decomposition
+    MatrixXd MbarInv = Mbar.lu().inverse();
+    // --- Method 2 ---     House Holder QR 
+    // VectorXd MbarInv = Mbar.fullPivHouseholderQr().inverse();
+    
+    // Calculate the matrix product
+    MatrixXd Hrs_MbarInv = Hbar * MbarInv;
+    
+    // Calculate the global matrix component affected by the current particle and each neighbor
+    for (int j = 0; j < nghNum; j++)
+    {
+        // Exception for ID that is not classified as neighbor
+        if (notNeighbor[j] == true) continue;
+
+        // Aliasing the particle ID
+        const int &idxj = ngh[j];   // Neighbor particle ID
+        
+        // Calculation of the matrix element
+        VectorXd Coef = Hrs_MbarInv * bbar[j];  // Coefficient addition of dx^2 and dy^2 part
+        // double elm = Coef(1) + Coef(2);         // The addition of dx^2 and dy^2 part
+        double elm = K.transpose() * Coef;         // The addition of dx^2 and dy^2 part
+
+        // Assign the data into container
+        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+            this->tripletList.push_back(Triplet<double>(idxi, idxj, elm));
+        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+            this->A_dense(idxi, idxj) = elm;
+        #endif
+    }
+    return;
+}
+
 // #pragma endregion
 
 // =====================================================
@@ -146,12 +739,14 @@ vec<double> PoissonLSMPS::get_p(const double &xij, const double &yij, const doub
  *  @param  coords  Particle data coordinate
  *  @param  nghList List of neighbor particle ID
  *  @param  size    The particle size container
+ *  @param  boundaryLoc The location of boundary container
 */
 void PoissonLSMPS::create_global_matrix(
     const vec<vec<double>> &pos,
     const vec<vec<int>> &nghList,
     const vec<double> &s,
-    const vec<bool> &bndFlag
+    const vec<int> &bndLoc
+    // const vec<bool> &bndFlag
 ){
     // There are two procedure in generating the global matrix
     /** Procedure
@@ -163,316 +758,149 @@ void PoissonLSMPS::create_global_matrix(
     this->N = s.size();     // Total particle number in the domain
 
     // Internal variable
-    // vec<Triplet<double>> tripletList;
+    // vec<Triplet<double>> tripletList;        // Move to class member
     // const double &_rs = Pars::sigma;        // Scaling size (the size of evaluated particle)
 
     // PROCEDURE 0:
     // ***********
     // Resize the global matrix 
-    std::cout << "Start matrix initialization!\n";
+    // std::cout << "Start matrix initialization!\n";
     #if (MATRIX_BASIS == 1)     // Sparse Matrix
-        vec<Triplet<double>> tripletList;
+        printf("%sType 1: Sparse Matrix %s\n", FONT_CYAN, FONT_RESET);
         this->A_sparse.resize(this->N, this->N);
     #elif (MATRIX_BASIS == 2)   // Dense Matrix
+        printf("%sType 2: Dense Matrix %s\n", FONT_CYAN, FONT_RESET);
         this->A_dense = MatrixXd::Zero(this->N, this->N);
     #endif
-    std::cout << "Done matrix initialization!\n";
+    // std::cout << "Done matrix initialization!\n";
 
 
     // PROCEDURE 1:
     // ***********
     // Similar procedure as calculating LSMPS
-    #if (LSMPS_TYPE == 1)
-        // Evaluate the standard LSMPS [type A] at each particle
-        // #pragma omp parallel for     // Can't be parallelize
-        for (int i = 0; i < this->N; i++)
-        {
-            // Note: Each particle discretization yields an equation that represent the row
+    // #pragma omp parallel for     // <!> Can't be parallelize
+    for (int i = 0; i < this->N; i++)
+    {
+        // Note: Each particle discretization yields an equation that represent the row
 
-            // Aliasing the target particle ID
-            const int &idxi = i;
+        // Aliasing the target particle ID
+        const int &idxi = i;
 
-            // If the current particle is the boundary
-            #if (BOUNDARY_ACTIVE == 1)
-                if (bndFlag[i] == true){
-                    // A dirichlet type of boundary condition
-                    #if (MATRIX_BASIS == 1)     // Sparse Matrix
-                        tripletList.push_back(Triplet<double>(idxi, idxi, 1.0));
-                    #elif (MATRIX_BASIS == 2)   // Dense Matrix
-                        this->A_dense(idxi, idxi) = 1.0;
+        // If the current particle is the boundary
+        #if (BOUNDARY_ACTIVE == 1)
+            if (bndLoc[i] != 0){
+                // BOTTOM BOUNDARY LOCATION
+                if (bndLoc[i] == -2){
+                    #if (BC_TYPE_BOTTOM == 1)
+                        // A dirichlet type of boundary condition
+                        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+                            this->tripletList.push_back(Triplet<double>(idxi, idxi, 1.0));
+                        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+                            this->A_dense(idxi, idxi) = 1.0;
+                        #endif
+                        continue;
+                    #elif (BC_TYPE_BOTTOM == 2)
+                        // A neuman type of boundary condition
+                        #if (LSMPS_TYPE == 1)
+                            // Evaluate the standard LSMPS [type A]
+                            this->matrix_const_neumann_A(idxi, pos, nghList[idxi], s, 2);
+                        #elif (LSMPS_TYPE == 2)
+                            // Evaluate the standard LSMPS [type B]
+                            this->matrix_const_neumann_B(idxi, pos, nghList[idxi], s, 2);
+                        #endif
+                        continue;
                     #endif
-                    continue;
-                }
-            #endif
-
-            // Particle coordinate alias
-            const double &_xi = pos[0].at(idxi);
-            const double &_yi = pos[1].at(idxi);
-
-            // Intermediate variable
-            const vec<int> &ngh = nghList[idxi];    // Neighbor list of the current idxi particle
-            const double &_rs = s[idxi];            // Scaling size (the size of evaluated particle)
-            const int nghNum = ngh.size();          // The number of neighbor particle
-            std::vector<bool> notNeighbor(nghNum, false);   // Neighbor flag container
-                
-            // Initialize the LSMPS matrices container
-            MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D_A, BASE_SIZE_2D_A);   // Scaling matrix
-            MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D_A, BASE_SIZE_2D_A);   // Moment matrix
-            VectorXd bi = VectorXd::Zero(BASE_SIZE_2D_A);                     // A vector collection of moment vector
-            vec<VectorXd> bbar = vec<VectorXd>(nghNum, VectorXd::Zero(BASE_SIZE_2D_A));   // Moment vector (separated for each neighbor)
-
-            // Initialize H_rs Matrix
-            Hbar(0, 0) = std::pow(_rs, -1);       // Dx(f)  | First order in x (1,0)
-            Hbar(1, 1) = std::pow(_rs, -1);       // Dy(f)  | First order in y (0,1)
-            Hbar(2, 2) = std::pow(_rs, -2) * 2;   // Dx2(f) | Second order in x (2,0)
-            Hbar(3, 3) = std::pow(_rs, -2);       // Dxy(f) | First in x,y (1,1)
-            Hbar(4, 4) = std::pow(_rs, -2) * 2;   // Dy2(f) | Second order in y (0,2)
-
-            // Calculate the moment matrix [Mbar] and vector [bbar]
-            for (int j = 0; j < nghNum; j++)
-            {
-                // Aliasing the neighbor particle ID
-                const int &idxj = ngh[j];
-
-                // No effect from the current neighbor (or neighbor outside the support domain)
-                if (idxi == idxj){
-                    notNeighbor[j] = true;
-                    continue;
                 }
                 
-                // Neighbor particle coordinate alias
-                const double &_xj = pos[0].at(idxj);
-                const double &_yj = pos[1].at(idxj);
-                
-                // Coordinate distance
-                double _dx = _xj - _xi;
-                double _dy = _yj - _yi;
-
-                // Resultant distance(_rij) and effective radius(_Re)
-                double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
-                double _Re;
-                switch (INTERACTION_TYPE){
-                case 1: // Effective radius type 1 (self particle size)
-                    _Re = RADIUS_FACTOR_2D * s[idxi];
-                    break;
-                case 2: // Effective radius type 2 (average particle size)
-                    _Re = RADIUS_FACTOR_2D * (s[idxi] + s[idxj]) * 0.5;
-                    break;
-                default:
-                    break;
-                }
-
-                // No effect from the current neighbor (or neighbor outside the support domain)
-                if (_rij > _Re){
-                    notNeighbor[j] = true;
-                    continue;
-                }
-
-                // Calculate the weight value
-                double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
-                // _wij *= std::pow(s[idxj]/s[idxi], 2.0);             // Add the relative size factor between particle (area ratio of ngh to curr) [Cause more error]
-                
-                // Calculate the distance vector p
-                const vec<double> _P = this->get_p(_dx, _dy, _rs);
-
-                // Calculation of moment matrix Mbar and bbar
-                for (int k1 = 0; k1 < BASE_SIZE_2D_A; k1++){
-                    for (int k2 = 0; k2 < BASE_SIZE_2D_A; k2++){
-                        // Generate tensor product between p
-                        Mbar(k1, k2) += (_wij * _P[k1] * _P[k2]);
-                    }
-                    
-                    // Calculate the vector matrix
-                    bi(k1) += _wij * _P[k1];
-
-                    // Generate moment matrix for each neighbor
-                    bbar[j](k1) = _wij * _P[k1];
-                }
-            }
-            
-            // Inverse the moment matrix
-            // --- Method 0 ---     Standard Matrix Inverse
-            // MatrixXd MbarInv = Mbar.inverse();
-            // --- Method 1 ---     LU Decomposition
-            MatrixXd MbarInv = Mbar.lu().inverse();     // LU is the best (fast and not much error for small matrix [6x6])
-            // --- Method 2 ---     House Holder QR 
-            // VectorXd MbarInv = Mbar.fullPivHouseholderQr().inverse();
-            
-            // Calculate the matrix product
-            MatrixXd Hrs_MbarInv = Hbar * MbarInv;
-            
-            // Calculate the global matrix component affected by the current particle and each neighbor
-            for (int j = 0; j < nghNum; j++)
-            {
-                // Exception for ID that is not classified as neighbor
-                if (notNeighbor[j] == true) continue;
-
-                // Aliasing the particle ID
-                const int &idxj = ngh[j];   // Neighbor particle ID
-                
-                // Calculation of the matrix element
-                VectorXd Coef = Hrs_MbarInv * bbar[j];  // Coefficient addition of dx^2 and dy^2 part
-                double elm = Coef(2) + Coef(4);         // The addition of dx^2 and dy^2 part
-
-                // Assign the data into container
-                #if (MATRIX_BASIS == 1)     // Sparse Matrix
-                    tripletList.push_back(Triplet<double>(idxi, idxj, elm));
-                #elif (MATRIX_BASIS == 2)   // Dense Matrix
-                    this->A_dense(idxi, idxj) = elm;
-                #endif
-            }
-
-            // Additional for the current element only
-            {
-                VectorXd Coef = Hrs_MbarInv * bi;   // Coefficient addition of dx^2 and dy^2 part
-                double elm = Coef(2) + Coef(4);     // The addition of dx^2 and dy^2 part
-
-                // Assign the data into container
-                #if (MATRIX_BASIS == 1)     // Sparse Matrix
-                    tripletList.push_back(Triplet<double>(idxi, idxi, -elm));
-                #elif (MATRIX_BASIS == 2)   // Dense Matrix
-                    this->A_dense(idxi, idxi) = -elm;
-                #endif
-            }
-        }
-    #elif (LSMPS_TYPE == 2)
-        // Evaluate the standard LSMPS [type B] at each particle
-        // #pragma omp parallel for
-        for (int i = 0; i < this->N; i++)
-        {
-            // Note: Each particle discretization yields an equation that represent the row
-
-            // Aliasing the target particle ID
-            const int &idxi = i;
-
-            // If the current particle is the boundary
-            #if (BOUNDARY_ACTIVE == 1)
-                if (bndFlag[i] == true){
-                    // Assign the data into container
-                    #if (MATRIX_BASIS == 1)     // Sparse Matrix
-                        tripletList.push_back(Triplet<double>(idxi, idxi, 1.0));
-                    #elif (MATRIX_BASIS == 2)   // Dense Matrix
-                        this->A_dense(idxi, idxi) = 1.0;
+                // LEFT BOUNDARY LOCATION
+                else if (bndLoc[i] == -1){
+                    #if (BC_TYPE_LEFT == 1)
+                        // A dirichlet type of boundary condition
+                        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+                            this->tripletList.push_back(Triplet<double>(idxi, idxi, 1.0));
+                        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+                            this->A_dense(idxi, idxi) = 1.0;
+                        #endif
+                        continue;
+                    #elif (BC_TYPE_LEFT == 2)
+                        // A neuman type of boundary condition
+                        #if (LSMPS_TYPE == 1)
+                            // Evaluate the standard LSMPS [type A]
+                            this->matrix_const_neumann_A(idxi, pos, nghList[idxi], s, 1);
+                        #elif (LSMPS_TYPE == 2)
+                            // Evaluate the standard LSMPS [type B]
+                            this->matrix_const_neumann_B(idxi, pos, nghList[idxi], s, 1);
+                        #endif
+                        continue;
                     #endif
-                    continue;
-                }
-            #endif
-
-            // Particle coordinate alias
-            const double &_xi = pos[0].at(idxi);
-            const double &_yi = pos[1].at(idxi);
-
-            // Intermediate variable
-            const vec<int> &ngh = nghList[idxi];    // Neighbor list of the current idxi particle
-            const double &_rs = s[idxi];            // Scaling size (the size of evaluated particle)
-            const int nghNum = ngh.size();          // The number of neighbor particle
-            std::vector<bool> notNeighbor(nghNum, false);   // Neighbor flag container
-                
-            // Initialize the LSMPS matrices container
-            MatrixXd Hbar = MatrixXd::Zero(BASE_SIZE_2D_B, BASE_SIZE_2D_B);   // Scaling matrix
-            MatrixXd Mbar = MatrixXd::Zero(BASE_SIZE_2D_B, BASE_SIZE_2D_B);   // Moment matrix
-            vec<VectorXd> bbar = vec<VectorXd>(nghNum, VectorXd::Zero(BASE_SIZE_2D_B));   // Moment vector (separated for each neighbor)
-
-            // Initialize H_rs Matrix
-            Hbar(0, 0) = 1;                       // D(f)   | Zero order (0,0)
-            Hbar(1, 1) = std::pow(_rs, -1);       // Dx(f)  | First order in x (1,0)
-            Hbar(2, 2) = std::pow(_rs, -1);       // Dy(f)  | First order in y (0,1)
-            Hbar(3, 3) = std::pow(_rs, -2) * 2;   // Dx2(f) | Second order in x (2,0)
-            Hbar(4, 4) = std::pow(_rs, -2);       // Dxy(f) | First in x,y (1,1)
-            Hbar(5, 5) = std::pow(_rs, -2) * 2;   // Dy2(f) | Second order in y (0,2)
-
-            // Calculate the moment matrix [Mbar] and vector [bbar]
-            for (int j = 0; j < nghNum; j++)
-            {
-                // Aliasing the neighbor particle ID
-                const int &idxj = ngh[j];
-                
-                // Neighbor particle coordinate alias
-                const double &_xj = pos[0].at(idxj);
-                const double &_yj = pos[1].at(idxj);
-                
-                // Coordinate distance
-                double _dx = _xj - _xi;
-                double _dy = _yj - _yi;
-
-                // Resultant distance(_rij) and effective radius(_Re)
-                double _rij = std::sqrt(std::pow(_dx, 2) + std::pow(_dy, 2));
-                double _Re;
-                switch (INTERACTION_TYPE){
-                case 1: // Effective radius type 1 (self particle size)
-                    _Re = RADIUS_FACTOR_2D * s[idxi];
-                    break;
-                case 2: // Effective radius type 2 (average particle size)
-                    _Re = RADIUS_FACTOR_2D * (s[idxi] + s[idxj]) * 0.5;
-                    break;
-                default:
-                    break;
                 }
 
-                // No effect from the current neighbor (or neighbor outside the support domain)
-                if (_rij > _Re){
-                    notNeighbor[j] = true;
-                    continue;
+                // RIGHT BOUNDARY LOCATION
+                else if (bndLoc[i] == 1){
+                    #if (BC_TYPE_RIGHT == 1)
+                        // A dirichlet type of boundary condition
+                        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+                            this->tripletList.push_back(Triplet<double>(idxi, idxi, 1.0));
+                        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+                            this->A_dense(idxi, idxi) = 1.0;
+                        #endif
+                        continue;
+                    #elif (BC_TYPE_RIGHT == 2)
+                        // A neuman type of boundary condition
+                        #if (LSMPS_TYPE == 1)
+                            // Evaluate the standard LSMPS [type A]
+                            this->matrix_const_neumann_A(idxi, pos, nghList[idxi], s, 1);
+                        #elif (LSMPS_TYPE == 2)
+                            // Evaluate the standard LSMPS [type B]
+                            this->matrix_const_neumann_B(idxi, pos, nghList[idxi], s, 1);
+                        #endif
+                        continue;
+                    #endif
                 }
 
-                // Calculate the weight value
-                double _wij = this->weight_function(_rij, _Re);     // Calculate the weight
-                // _wij *= std::pow(s[idxj]/s[idxi], 2.0);             // Add the relative size factor between particle (area ratio of ngh to curr)
-                
-                // Calculate the distance vector p
-                const vec<double> _P = this->get_p(_dx, _dy, _rs);
-
-                // Calculation of moment matrix Mbar and bbar
-                for (int k1 = 0; k1 < BASE_SIZE_2D_B; k1++){
-                    for (int k2 = 0; k2 < BASE_SIZE_2D_B; k2++){
-                        // Generate tensor product between p
-                        Mbar(k1, k2) += (_wij * _P[k1] * _P[k2]);
-                    }
-                    // Generate moment matrix for each neighbor
-                    bbar[j](k1) = _wij * _P[k1];
+                // TOP BOUNDARY LOCATION
+                else if (bndLoc[i] == 2){
+                    #if (BC_TYPE_TOP == 1)
+                        // A dirichlet type of boundary condition
+                        #if (MATRIX_BASIS == 1)     // Sparse Matrix
+                            this->tripletList.push_back(Triplet<double>(idxi, idxi, 1.0));
+                        #elif (MATRIX_BASIS == 2)   // Dense Matrix
+                            this->A_dense(idxi, idxi) = 1.0;
+                        #endif
+                        continue;
+                    #elif (BC_TYPE_TOP == 2)
+                        // A neuman type of boundary condition
+                        #if (LSMPS_TYPE == 1)
+                            // Evaluate the standard LSMPS [type A]
+                            this->matrix_const_neumann_A(idxi, pos, nghList[idxi], s, 2);
+                        #elif (LSMPS_TYPE == 2)
+                            // Evaluate the standard LSMPS [type B]
+                            this->matrix_const_neumann_B(idxi, pos, nghList[idxi], s, 2);
+                        #endif
+                        continue;
+                    #endif
                 }
             }
-            
-            // Inverse the moment matrix
-            // --- Method 0 ---     Standard Matrix Inverse
-            // MatrixXd MbarInv = Mbar.inverse();
-            // --- Method 1 ---     LU Decomposition
-            MatrixXd MbarInv = Mbar.lu().inverse();
-            // --- Method 2 ---     House Holder QR 
-            // VectorXd MbarInv = Mbar.fullPivHouseholderQr().inverse();
-            
-            // Calculate the matrix product
-            MatrixXd Hrs_MbarInv = Hbar * MbarInv;
-            
-            // Calculate the global matrix component affected by the current particle and each neighbor
-            for (int j = 0; j < nghNum; j++)
-            {
-                // Exception for ID that is not classified as neighbor
-                if (notNeighbor[j] == true) continue;
+        #endif
 
-                // Aliasing the particle ID
-                const int &idxj = ngh[j];   // Neighbor particle ID
-                
-                // Calculation of the matrix element
-                VectorXd Coef = Hrs_MbarInv * bbar[j];  // Coefficient addition of dx^2 and dy^2 part
-                double elm = Coef(3) + Coef(5);         // The addition of dx^2 and dy^2 part
+        // Construct the matrix
+        #if (LSMPS_TYPE == 1)
+            // Evaluate the standard LSMPS [type A]
+            this->matrix_const_LSMPS_A(idxi, pos, nghList[idxi], s);
+        #elif (LSMPS_TYPE == 2)
+            // Evaluate the standard LSMPS [type B]
+            this->matrix_const_LSMPS_B(idxi, pos, nghList[idxi], s);
+        #endif
+    }
 
-                // Assign the data into container
-                #if (MATRIX_BASIS == 1)     // Sparse Matrix
-                    tripletList.push_back(Triplet<double>(idxi, idxj, elm));
-                #elif (MATRIX_BASIS == 2)   // Dense Matrix
-                    this->A_dense(idxi, idxj) = elm;
-                #endif
-            }
-        }
-    #endif
     
     // PROCEDURE 2:
     // ***********
-    // Add the data into the global matrix 
+    // Add the data into the global matrix (Sparse matrix only)
     #if (MATRIX_BASIS == 1)     // Sparse Matrix
-        this->A_sparse.setFromTriplets(tripletList.begin(),tripletList.end());
+        this->A_sparse.setFromTriplets(this->tripletList.begin(),this->tripletList.end());
         this->A_sparse.makeCompressed();
+        this->tripletList.clear();      // Release the container
     #endif
 
     return;
@@ -499,8 +927,11 @@ void PoissonLSMPS::solve(const vec<double> &RHS){
     // =========================================
     // ---------- Dense Matrix Solver ----------
     // =========================================
-    #if (MATRIX_BASIS == 1)
+    #if (MATRIX_BASIS == 2)
         #if (MATRIX_SOLVER == 1)
+            // Solver Prompt
+            printf("%sType 1: Dense LU Decomposition %s\n", FONT_CYAN, FONT_RESET);
+
             // [TYPE 1] Solve the dense global matrix using LU decomposition
             _phi = this->A_dense.lu().solve(b);
             /**
@@ -510,6 +941,9 @@ void PoissonLSMPS::solve(const vec<double> &RHS){
             */
 
         #elif (MATRIX_SOLVER == 2)
+            // Solver Prompt
+            printf("%sType 2: Full Piv Holder Solver %s\n", FONT_CYAN, FONT_RESET);
+
             // [TYPE 2] Solve the dense global matrix using full Piv Householder QR
             _phi = this->A_dense.fullPivHouseholderQr().solve(b);
             /**
@@ -520,18 +954,27 @@ void PoissonLSMPS::solve(const vec<double> &RHS){
     // =========================================
     // --------- Sparse Matrix Solver ----------
     // =========================================
-    // #elif (MATRIX_BASIS == 2)
+    #elif (MATRIX_BASIS == 1)
         #if (MATRIX_SOLVER == 1)
+            // Solver Prompt
+            printf("%sType 1: Sparse LU Solver %s\n", FONT_CYAN, FONT_RESET);
+
             // [TYPE 1] Using sparse LU decomposition
             SparseLU <SparseMatrix<double>> solver;
             solver.compute(this->A_sparse);
             _phi = solver.solve(b);
             /**
-             * NOTE: Cannot solve the problem <?>
+             * NOTE: Cannot solve the problem <!> If matrix only use the inner domain treatment
+             * It may be for a single resolution (even distribution) have a regular pattern that lessen the matrix rank
              *  - Solve 40000 particle takes 3.9 secs
+             *  - Solve 160000 particle takes 29.9 secs
+             * The best solver for accuracy (Computational time similar to LDLT)
             */
 
         #elif (MATRIX_SOLVER == 2)
+            // Solver Prompt
+            printf("%sType 2: Sparse Simplicial LDLT Solver %s\n", FONT_CYAN, FONT_RESET);
+
             // [TYPE 2] Using sparse Simple LDLT
             // Eigen::initParallel();
             SimplicialLDLT <SparseMatrix<double>> solver;
@@ -548,10 +991,14 @@ void PoissonLSMPS::solve(const vec<double> &RHS){
             /**
              * NOTE: Works with result quite well, but still have multiresolution problem
              * - 40000 par takes 2.2 secs
-             * - 39000 par mulres takes 206 sec
+             * - 39000 par mulres (Modification) takes 206 sec
+             * - 160000 par takes 29.9 secs
             */
         
         #elif (MATRIX_SOLVER == 3)
+            // Solver Prompt
+            printf("%sType 3: Sparse QR Iterative Solver %s\n", FONT_CYAN, FONT_RESET);
+
             // [TYPE 3] Using sparse QR
             // Eigen::initParallel();
             Eigen::SparseQR <SparseMatrix<double>, COLAMDOrdering<int>> solver;
@@ -562,6 +1009,9 @@ void PoissonLSMPS::solve(const vec<double> &RHS){
             */
         
         #elif (MATRIX_SOLVER == 4)
+            // Solver Prompt
+            printf("%sType 4: Sparse BiCGStab Iterative Solver %s\n", FONT_CYAN, FONT_RESET);
+
             // [TYPE 4] Using paralel BiCGStab
             // Operator initialization
             Eigen::initParallel();
@@ -574,7 +1024,7 @@ void PoissonLSMPS::solve(const vec<double> &RHS){
             solver.compute(this->A_sparse);
             _phi = solver.solve(b);
             /**
-             * NOTE: Still don't know about this method. Anyway, this method is not work
+             * NOTE: Still don't know about this method. Anyway, this method is not working
              * -
             */
         #endif

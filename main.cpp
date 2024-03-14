@@ -10,7 +10,7 @@
  * ##########################################*/
 
 /* ---------------- PROGRAM DESCRIPTION ----------------
-	> The main program of VPM-LSMPS fluid solver program
+    > The main program of VPM-LSMPS fluid solver program
     > All parameter used in running the program is stored
       in global.cpp
     > Detailed calculation process is given later on
@@ -91,9 +91,15 @@ int main(int argc, char const *argv[])
 	// #pragma endregion
 
 	// #pragma region SIMULATION_STABILITY_INDICATOR
-		double CourMax = Pars::Courant;                         // Global maximum courant number throughout simulation
-		double DiffMax = Pars::Diffusion;                       // Global maximum diffusion number throughout simulation
-		double StabMax = 50*Pars::sigma*Pars::sigma/Pars::NU;   // Global maximum stability criteria throughout simulation
+		double CourMax = Pars::Courant;     // Global maximum courant number throughout simulation
+		double DiffMax = Pars::Diffusion;   // Global maximum diffusion number throughout simulation
+		double VortMax = Pars::Vortex;   	// Global maximum vorticity criteria throughout simulation (mesh criteria)
+		
+		// Collection of stability number
+		std::vector<double*> stabNumList;
+		stabNumList.push_back(&CourMax);
+		stabNumList.push_back(&DiffMax);
+		stabNumList.push_back(&VortMax);
 	// #pragma endregion
 
 	// [CONSOLE LOG] Display simulation parameter to console
@@ -122,23 +128,41 @@ int main(int argc, char const *argv[])
 	// *******************************************************************
 	// Initial particle distribution generation
 	initialization_tool.initialize_particle(particle, bodyList, nodeGridList);
+	initialization_tool.initialize_vorticity(particle);
 
-	// Additional Patch to update the domain boundary check
-	initialization_tool.update_domain_boundary(particle);
+	save_manager.save_grid_node_state(nodeGridList, "before_adapt", 1);
+	remesh_tool.get_remeshing(particle, nodeGridList, 0, bodyList);
+
+	save_manager.save_grid_node_state(nodeGridList, "after_adapt", 1);
+	exit(1);
+	// <!> Need an update for additional boundary element
+	// initialization_tool.initialize_laplace(particle);
 
 	// Generate the particle neighbor ID data list
 	remesh_tool.set_neighbor(particle, nodeGridList);
+
+	// // [Additional Patch]: update the domain boundary check
+	// initialization_tool.update_domain_boundary(particle);
 	
-	// Initial particle distribution generation
-	initialization_tool.initialize_vorticity(particle);
+	// // [Additional Patch]: Initial particle distribution generation
+	// initialization_tool.initialize_vorticity(particle);
+
+	// save_manager.save_par_state(particle, "AWAL", 0);
 	
-	// Adaptation of vorticity only for no obstacle simulation
-	#if (N_BODY == 0)
-		remesh_tool.get_remeshing(particle, nodeGridList, 0, bodyList);
-	#endif
+	// // Adaptation of vorticity only for no obstacle simulation
+	// if (N_BODY == 0)
+	// remesh_tool.get_remeshing(particle, nodeGridList, 0, bodyList);
 
 	// ** Here a Debug or Testing line Start
 		/* Put your code here ... */
+		// initialization_tool.laplace(particle);
+		// initialization_tool.test_0(particle);
+		// initialization_tool.test_1(particle);
+		// initialization_tool.test_2(particle);
+		// initialization_tool.initialize_vorticity(particle);
+		
+		// // [Additional Patch]: update the domain boundary check
+		// initialization_tool.update_domain_boundary(particle);
 
 	// ** Here a Debug or Testing line End
 
@@ -172,7 +196,8 @@ int main(int argc, char const *argv[])
 	
 	// Display the summary to the console
 	printf("\n+------------ Initialization Summary -------------+\n");
-	printf("Count of total body node                : %8d \n", sumBodyNode);
+	if (sumBodyNode == 0)	printf("No body simulation <!>\n");
+	else					printf("Count of total body node                : %8d \n", sumBodyNode);
 	printf("Count of particle node                  : %8d \n", particle.num);
 	printf("Total iteration number                  : %8d \n", Pars::max_iter);
 	printf("+-------------------------------------------------+\n\n");
@@ -199,6 +224,59 @@ int main(int argc, char const *argv[])
 	if (_cmd == "yes" || _cmd == "Yes" || _cmd == "Y" || _cmd == "y") _run = true;
 	else _run = false;
 
+	// // // ==========================================================================================================
+	// // [!] TESTING POISSON SOLVER using Test Function
+	// if (_run == false) exit(1);
+	
+	// // [2] Velocity calculation by biot savart: solving Rotational Velocity & Stretching
+	// // velocity_tool.LSMPS_poisson_2d(particle, 0);
+	// // if (particle.P.empty()){
+	// // 	particle.P = std::vector<double> (particle.num);
+	// // }
+	// velocity_tool.get_velocity(particle, nodeGridList, 0);
+	
+	// // [!] TODO 2: Saving Particle Data
+	// // Saving particle data
+	// std::string DataName = "PV_FMM_MR1";		// Write data file name
+	// save_manager.save_par_state(particle, DataName, -1);	// Saving particle data
+
+	// // Calculation of L2 Norm Error of velocity
+	// double SSDu = 0.0;		// The sum of square different
+	// double SASu = 0.0;		// The sum of analytixal square
+	// double SSDv = 0.0;		// The sum of square different
+	// double SASv = 0.0;		// The sum of analytixal square
+	// for (int i = 0; i < particle.num; i++){
+	// 	// double diff = particle.gz[i] - particle.chi[i];
+	// 	// SSD += diff*diff;
+	// 	// SAS += particle.chi[i]*particle.chi[i];
+
+	// 	double diff = particle.u[i] - particle.gx[i];
+	// 	SSDu += diff*diff;
+	// 	SASu += particle.gx[i]*particle.gx[i];
+
+	// 	diff = particle.v[i] - particle.gy[i];
+	// 	SSDv += diff*diff;
+	// 	SASv += particle.gy[i]*particle.gy[i];
+	// }
+	// double L2Nu = std::sqrt(SSDu/SASu);
+	// double L2Nv = std::sqrt(SSDv/SASv);
+
+	// // Update the summary data file
+	// _write.open(save_manager.get_log_directory(), std::ofstream::out | std::ofstream::app);
+	// _write.precision(10);
+	// _write << "L2Norm velocity x                  : " << wR << L2Nu << "\n";
+	// _write << "L2Norm velocity y                  : " << wR << L2Nv << "\n";
+	// _write.close();
+
+	// std::cout << "And the L2 norm error velocity x of : " << wR << L2Nu << "\n";
+	// std::cout << "And the L2 norm error velocity y of : " << wR << L2Nv << "\n";
+	
+	// // // Break the simulation
+	// // throw std::exception();
+	exit(1);
+	// // // ==========================================================================================================
+	
+
 	// =====================================================
 	// =============== SIMULATION ITERATION ================
 	// =====================================================
@@ -220,15 +298,9 @@ int main(int argc, char const *argv[])
 			// Print current iteration header
 			utility.printHeader(step);
 
-			// Printing the stability criteria: courant (C) and diffusion (Phi) number
-			if (Pars::flag_disp_stability){
-				std::vector<double> max_stab;
-				utility.stabilityEval(particle, max_stab);
-
-				// Update the global stability criteria maximum value
-				if (max_stab[0] > CourMax){CourMax = max_stab[0];}
-				if (max_stab[1] > DiffMax){DiffMax = max_stab[1];}
-				if (max_stab[2] > StabMax){StabMax = max_stab[2];}
+			// Printing the stability criteria: courant (C), diffusion (Phi), and mesh reynold (Re_h) number
+			if (Pars::flag_disp_stability || Pars::flag_save_stability){
+				utility.stabilityEval(particle, stabNumList, step);
 			}
 
 			// Solver computational time manager
@@ -261,16 +333,32 @@ int main(int argc, char const *argv[])
 				
 				// SOLVER SEQUENCE : 3 -> 4 -> 5 -> 1 -> 2
 
-				// // =============== SOLVER STEP [3] ===============
-				// // [3] Perform penalization using Brinkmann: Penalize the velocity in body domain
-				// #if (N_BODY > 0)
-				// 	penalization_tool.get_penalization(particle, bodyList, step);
-				// #endif
+				// *************** ADDITIONAL STEP [1] ***************
+				if (Pars::flag_peturbation == true){
+					// Set the iteration when peturbation generated
+					double ptbTime = 3.0;				// The time when peturbation occured (Defined manually)
+					int ptbIter = ptbTime / Pars::dt;	// The iteration step when peturbation occured
+					
+					// Add the peturbation into the domain
+					if (step == ptbIter){
+						// std::cout << "Adding a small peturbation ...\n";
+						printf("%sAdding a small peturbation ...%s\n", FONT_CYAN, FONT_RESET);
+						utility.addVorPertubation(particle);
+						// save_manager.save_par_state(particle, "peturbation", 0);	// Saving particle data	
+					}
+				}
+				// ***************************************************
 
-				// // ================ Barrier Mark - Data Saving =================
-				// // [!] TODO 1: Saving Data Force 
-				// force_tool.force_calc(particle, bodyList, step, 2, "aftPen");		// Penalization mode
-				// // force_tool.force_calc(particle, bodyList, step, 3, "aftPenMom");	// Vorticity moment mode
+				// =============== SOLVER STEP [3] ===============
+				// [3] Perform penalization using Brinkmann: Penalize the velocity in body domain
+				#if (N_BODY > 0)
+					penalization_tool.get_penalization(particle, bodyList, step);
+				#endif
+
+				// ================ Barrier Mark - Data Saving =================
+				// [!] TODO 1: Saving Data Force 
+				force_tool.force_calc(particle, bodyList, step, 2, "aftPen");		// Penalization mode
+				// force_tool.force_calc(particle, bodyList, step, 3, "aftPenMom");	// Vorticity moment mode
 				
 				// // [!] TODO 2: Saving Particle Data
 				// if ((step % Pars::save_inv == 0)){
@@ -280,32 +368,34 @@ int main(int argc, char const *argv[])
 				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
 				// }
 				
-				// // =============== SOLVER STEP [4] ===============
-				// // [4] Convection or Advection Sub-step: Perform the particle advection
-				// advection_tool.main_advection(particle);      			// [!] later: do 2nd order scheme
+				// =============== SOLVER STEP [4] ===============
+				// [4] Convection or Advection Sub-step: Perform the particle advection
+				advection_tool.main_advection(particle);      			// [!] later: do 2nd order scheme
 				
-				// // =============== SOLVER STEP [5.1] ===============
-				// // [5.1] Diffusion Sub-step: Calculate the vorticity diffusion & time integration
-				// if (DIM == 2) diffusion_tool.main_diffusion(particle); 	// [!] later: do 2nd order scheme
+				// =============== SOLVER STEP [5.1] ===============
+				// [5.1] Diffusion Sub-step: Calculate the vorticity diffusion & time integration
+				if (DIM == 2) diffusion_tool.main_diffusion(particle); 	// [!] later: do 2nd order scheme
 
-				// // =============== SOLVER STEP [5.2] ===============
-				// // [5.2] Stretching Sub-step: Calculate the vorticity stretching & time integration
-				// if (DIM == 3) stretching_tool.calc_diff_stretch(particle);
+				// =============== SOLVER STEP [5.2] ===============
+				// [5.2] Stretching Sub-step: Calculate the vorticity stretching & time integration
+				if (DIM == 3) stretching_tool.calc_diff_stretch(particle);
 
-				// // // [!] TODO 2: Saving Particle Data
-				// // if ((step % Pars::save_inv == 0)){
-				// // 	// Saving particle data
-				// // 	std::string DataName = utility.saveName(step);		// Write data file name
-				// // 	DataName = "aftStr_" + DataName;
-				// // 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
-				// // }
-
-				// // =============== SOLVER STEP [1] ===============
-				// // [1] Particle redistribution: rearrange the particle distribution by interpolating vorticity
-				// if ((step % Pars::rmsh_inv) == 0){
-				// 	// Particle redistribution (*every given iteration step)
-				// 	remesh_tool.get_remeshing(particle, nodeGridList, step, bodyList);
+				// // [!] TODO 2: Saving Particle Data
+				// if ((step % Pars::save_inv == 0)){
+				// 	// Saving particle data
+				// 	std::string DataName = utility.saveName(step);		// Write data file name
+				// 	DataName = "aftStr_" + DataName;
+				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
 				// }
+
+				// =============== SOLVER STEP [1] ===============
+				// [1] Particle redistribution: rearrange the particle distribution by interpolating vorticity
+				if ((step % Pars::rmsh_inv) == 0){
+					// Particle redistribution (*every given iteration step)
+					remesh_tool.get_remeshing(particle, nodeGridList, step, bodyList);
+				}
+				// [Additional Patch]: update the domain boundary check
+				initialization_tool.update_domain_boundary(particle);
 
 				// // [!] TODO 2: Saving Particle Data
 				// if ((step % Pars::save_inv == 0)){
@@ -319,16 +409,22 @@ int main(int argc, char const *argv[])
 				// [2] Velocity calculation by biot savart: solving Rotational Velocity & Stretching
 				velocity_tool.get_velocity(particle, nodeGridList, step);
 
-				// [!] TODO 2: Saving Particle Data
-				if ((step % Pars::save_inv == 0)){
-					// Saving particle data
-					std::string DataName = utility.saveName(step);		// Write data file name
-					// DataName = "aftVel_" + DataName;
-					save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
-				}
+				// // [!] TODO 2: Saving Particle Data
+				// if ((step % Pars::save_inv == 0)){
+				// 	// Saving particle data
+				// 	std::string DataName = utility.saveName(step);		// Write data file name
+				// 	DataName = "aftVel_" + DataName;
+				// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
+				// }
+
+				// // [!] DEBUG: Saving Particle Data
+				// std::string DataName = utility.saveName(step);		// Write data file name
+				// // DataName = "test_mres_" + DataName;
+				// DataName = "hor_rec";
+				// save_manager.save_par_state(particle, DataName, -1);	// Saving particle data
 				
-				// // Break for 1000 iteration
-				if (step == 0) throw std::exception();
+				// // Break here
+				// exit(1);
 
 			}	// End of the solver calculation
 
@@ -342,17 +438,17 @@ int main(int argc, char const *argv[])
 			// force_tool.force_calc(particle, bodyList, step, 2, "force");
 
 			// [2] Save the particle data at given step interval
-			// if ((step % Pars::save_inv == 0)){
-			// 	// Saving particle data
-			// 	std::string DataName = utility.saveName(step);		// Write data file name
-			// 	save_manager.save_par_state(particle, DataName, 0);	// Saving particle data
-				
-			// 	// Saving Residual
-			// 	if (Pars::flag_save_residual == true)
-			// 	utility.saveResidual(particle, step);
-			// }
+			if ((step % Pars::save_inv == 0)){
+				// Saving particle data
+				std::string DataName = utility.saveName(step);		// Write data file name
+				save_manager.save_par_state(particle, DataName, 0);	// Saving particle data	
+			}
 
-			// [3] Update the particle count
+			// [3] Saving Residual
+			if (Pars::flag_save_residual == true)
+			utility.saveResidual(particle, step);
+
+			// [4] Update the particle count
 			minParticleNum = std::min<int>(minParticleNum, particle.num);
 			maxParticleNum = std::max<int>(maxParticleNum, particle.num);
 
@@ -416,7 +512,7 @@ int main(int argc, char const *argv[])
 		_write << std::fixed << std::setprecision(4)
 		       << "Max. global Cour. number (C_max)   :" << w12 << wR << CourMax << "\n"
 		       << "Max. global Diff. number (phi_max) :" << w12 << wR << DiffMax << "\n"
-		       << "Max. global Stab. number (Re_h_max):" << w12 << wR << StabMax << "\n";
+		       << "Max. global Vort. number (Re_h_max):" << w12 << wR << VortMax << "\n";
 		_write.close();
 
 		
@@ -452,7 +548,7 @@ int main(int argc, char const *argv[])
 
 		printf("Max. global Courant number (C_max)   : %9.2f \n", CourMax);
 		printf("Max. global Diff. number (phi_max)   : %9.2f \n", DiffMax);
-		printf("Max. global Stab. number (Re_h_max)  : %9.2f \n", StabMax);
+		printf("Max. global Vort. number (Re_h_max)  : %9.2f \n", VortMax);
 		printf("%s+-------------------------------------------------+%s\n", FONT_BLUE, FONT_RESET);
 
 		// Simulation is done successfully!
@@ -475,6 +571,39 @@ int main(int argc, char const *argv[])
 // =====================================================
 int main(int argc, char const *argv[])
 {
+	/** 
+	 *  @brief	A main subroutine for particle data interpolation. This process belongs to 
+	 *  post processing subroutines of multiresolution data in 3D space. In order to 
+	 *  efficiently render the data into paraview, a structured single resolution data is 
+	 *  necessary. This subroutine will process all saved particle state data from the
+	 *  previously computed simulation. The interpolated data are labeled by "SRID".
+	 * 
+	 *  NOTE:
+	 * 	 > This subroutine only belong to 3D space simulation, since 2D simulation is not necessary.
+	 *   > Subroutine also provided with Q and λ2 calculated data.
+	 *   > The collected data is 
+	 * 		(1) Coordinate[3]
+	 * 		(2) Velocity[3]
+	 * 		(3) Vorticity[3]
+	 * 		(4) Q[1]
+	 * 		(5) λ2[1]
+	 *     of total 11 variable set
+	 * 
+	 *  PREPARE:
+	 *   > Set the dimension in 3D (Still need to be adjusted)
+	 *   > Define the target domain size and interpolated particle spacing (see global.cpp)
+	 *   > 
+	*/
+
+	// Main interpolation parameter (can be adjusted manually)
+	// const int fin_iter = Pars::max_iter;            // The final iteration for interpolation
+	// const int save_int = Pars::save_inv;			// Iteration interval for saving data
+	// const int data_num = 1 + fin_iter/save_int;     // The number of particle state data (including the zeros)
+
+	const int fin_iter = 8000;            // The final iteration for interpolation
+	const int save_int = 20;			// Iteration interval for saving data
+	const int data_num = 1 + fin_iter/save_int;     // The number of particle state data (including the zeros)
+
 	// #pragma region SUBROUTINE_INSTANCES
 		initialization initialization_tool;  // Particle distribution
 		remeshing remesh_tool;               // Particle redistribution
@@ -482,32 +611,35 @@ int main(int argc, char const *argv[])
 		save_data save_manager;              // Data writing manager
 	// #pragma endregion
 
-	// Main interpolation parameter
-	const int max_iter = Pars::max_iter;
-	const int save_int = 50;	// Pars::save_inv;
-	const int data_num = 1 + max_iter/save_int;
-
 	// Pre-processing prompt display
 	printf("%s#=================================================#%s\n", FONT_RED, FONT_RED);
 	printf("+-------------------- %sSUMMARY%s --------------------+\n", FONT_TORQUOISE, FONT_RED);
 	printf("%s#=================================================#%s\n", FONT_RED, FONT_RESET);
+
+	int xCnt = std::ceil(Pars::lxdomInt/Pars::sigmaInt);
+	int yCnt = std::ceil(Pars::lydomInt/Pars::sigmaInt);
+	int zCnt = std::ceil(Pars::lzdomInt/Pars::sigmaInt);
 
 	// Initial flow parameters summary data
 	printf("\n+--------- Interpolation Parameters Data ---------+\n");
 	printf(" Domain x length                       : %7.2f m\n", Pars::lxdomInt);
 	printf(" Domain y length                       : %7.2f m\n", Pars::lydomInt);
 	printf(" Domain z length                       : %7.2f m\n", Pars::lzdomInt);
-	printf(" Core size                             : %7.2f m\n", Pars::sigmaInt);
-	printf(" Total iteration step                  : %9d \n", max_iter);
+	printf(" Interpolated core size                : %7.2f m\n", Pars::sigmaInt);
+	printf(" Number of particle in x basis         : %9d m\n", xCnt);
+	printf(" Number of particle in y basis         : %9d m\n", yCnt);
+	printf(" Number of particle in z basis         : %9d m\n", zCnt);
+	printf(" Total particle number                 : %9d m\n", xCnt*yCnt*zCnt);
+	printf(" Final iteration step                  : %9d \n", fin_iter);
 	printf(" Step interval                         : %9d \n", save_int);
-	printf(" Number of data                        : %9d \n", data_num);
+	printf(" Number of sate data                   : %9d \n", data_num);
 	printf("+-------------------------------------------------+\n\n");
 
 
 	// ====================== Simulation Run Prompt ======================
 	// *******************************************************************
 	// Simulation command prompt
-	std::cout << FONT_RESET << "<!> Run the interpolation? ("
+	std::cout << FONT_RESET << "<!> Proceed to the interpolation? ("
 			  << FONT_GREEN << "yes" << FONT_RESET << "/" 
 			  << FONT_RED   << "no"  << FONT_RESET << ")\n" 
 			  << "    Type here: ";
@@ -538,20 +670,21 @@ int main(int argc, char const *argv[])
 			double _time = omp_get_wtime();
 		#endif
 		
-		// The particle number variable
-		int intParNum;
-
+		
+		// ======================== Interpolation Loop =======================
+		// *******************************************************************
+		// Start the interpolation to all particle data state
 		for (int n = 0; n < data_num; n++){
-			// Alias to the current iteration
+			// Alias to the current iteration* [Can be adjusted manually]
 			const int step = n * save_int;
 			
 			// Print header
 			utility.printHeader(step);
 
 			// Internal variable
-			std::vector<Body> bodyList(N_BODY);  	// Obstacle solid object data list 
-			Particle srcParticle, intParticle;		// Particle data storage
-			GridNode nodeGridList;               	// Node data structure (Particle Related Data)
+			Particle srcParticle;      // Source particle data container (particle from local storage)
+			Particle intParticle;      // Interpolated particle data container
+			GridNode nodeGridList;     // Node data structure (Related to the source particle)
 
 			// Read the source data
 			#if (DIM == 2)
@@ -571,9 +704,6 @@ int main(int argc, char const *argv[])
 			// Save the interpolated data
 			std::string stepName = utility.saveName(step);
 			save_manager.save_par_interpolation(intParticle, stepName);
-
-			// Update the particle number
-			intParNum = intParticle.num;
 		}
 
 		// Interpolation summary!
@@ -594,8 +724,6 @@ int main(int argc, char const *argv[])
 
 		printf("\n%s+-------------- Simulation Summary ---------------+%s\n", FONT_BLUE, FONT_RESET);
 		printf("Interpolation end at  : %s", std::ctime(&now));
-		printf("Interpolated particle number         : %9d \n", intParNum);
-		
 		if (_time < 60.0){
 			// If simulation runs below than 1 minute
 			printf("Total computational time             : %9.2f s \n", _time);
@@ -612,11 +740,11 @@ int main(int argc, char const *argv[])
 		
 
 		// Simulation is done successfully!
-		printf("%s\n<!> The distribution interpolation is finished successfully! %s\n", FONT_GREEN, FONT_RESET);
+		printf("%s\n<!> The post-processing is finished successfully! %s\n", FONT_GREEN, FONT_RESET);
 	}
 	else{
 		// Interpolation is not executed!
-		printf("%s\n<!> The interpolation is not executed! %s\n", FONT_BLUE, FONT_RESET);
+		printf("%s\n<!> The interpolation is cancelled! %s\n", FONT_BLUE, FONT_RESET);
 	}
 	
 

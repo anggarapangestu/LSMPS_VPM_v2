@@ -37,10 +37,11 @@ public:
 	// // Utilities
 	// std::string save_data::saveName(int step);
 	
-	// Simulation summary log 
-	std::string get_log_directory(){
-		return this->sumLogDir;
-	}
+	// // Simulation summary log 
+	// std::string get_log_directory(){
+	// 	return this->sumLogDir;
+	// }
+	std::string get_log_directory();
 	void summary_log();
 	void write_summary_log();
 	

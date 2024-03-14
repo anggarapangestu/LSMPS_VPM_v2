@@ -38,6 +38,7 @@ struct Node
     int tarResLv;       // Resolution target to evaluate the adaptive operation
     
     // Adaptive Node Modifier <?> This become unnecessary <?>
+    bool isBoundary;        // Flag for a boundary cell
     bool isActive;          // Flag for an active cell
     bool needCompression;   // Flag for node compression    <!> USED <!>
     bool needRefinement;    // Flag for node refinement     <?> STILL NOT USED <?>
@@ -53,6 +54,7 @@ struct Node
         isLeaf(true),
         headNodeID(-1),
         tarResLv(ROOT_LEVEL),
+        isBoundary(false),
         isActive(false),
         needCompression(false),
         needRefinement(false)
@@ -71,6 +73,7 @@ struct Node
         isLeaf(_node->isLeaf),
         headNodeID(_node->headNodeID),
         tarResLv(_node->tarResLv),
+        isBoundary(_node->isBoundary),
         isActive(_node->isActive),
         needCompression(false),
         needRefinement(false)
@@ -93,6 +96,7 @@ struct Node
         isLeaf(true),
         headNodeID(-1),
         tarResLv(ROOT_LEVEL),
+        isBoundary(false),
         isActive(false),
         needCompression(false),
         needRefinement(false)
@@ -149,13 +153,15 @@ struct GridNode
 
     
     // GridNode element member
-    double pivotCoor[DIM];  // The pivot position coordinate (left(x), bottom(y), front (z))
-    int gridCount[DIM];     // The ROOT node count at each dimension
-    int baseParNum;         // Number of particle in one node (each dimension)
-    double gridSize;        // Size of the ROOT (level 0) grid node box
-    int rootNodeNum;        // The number of all ROOT node (Basically product each @gridCount element)
-    int maxLevel;           // The limit of resolution step or LEAF node level
-    int chdNum;             // The number of child on a node
+    double pivotCoor[DIM];      // The pivot position coordinate (left(x), bottom(y), front (z))
+    int gridCount[DIM];         // The ROOT node count at each dimension
+    double minDomBound[DIM];    // Min. bound location of domain boundaries at each dimension
+    double maxDomBound[DIM];    // Max. bound location of domain boundaries at each dimension
+    int baseParNum;             // Number of particle in one node (each dimension)
+    double gridSize;            // Size of the ROOT (level 0) grid node box
+    int rootNodeNum;            // The number of all ROOT node (Basically product each @gridCount element)
+    int maxLevel;               // The limit of resolution step or LEAF node level
+    int chdNum;                 // The number of child on a node
     std::vector<int> startID;   // List of starting ID at each level
 
     // UTILITIES FUNCTION METHOD

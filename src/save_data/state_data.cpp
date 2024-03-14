@@ -1,6 +1,19 @@
 #include "save_data.hpp"
 
 /**
+ *  @brief Get the name of the parameter summary log file.
+ *  
+ *  @return The name of parameter summary log file.
+*/
+std::string save_data::get_log_directory(){
+	// std::string name = "output/Summary_";
+	// name += "PV_FMM_MR1";
+	// name += ".dat";
+	return this->sumLogDir;
+	// return name;
+}
+
+/**
  *  @brief Write the body coordinate properties.
  *  
  *  @param	_body	The body object to be write.
@@ -114,14 +127,9 @@ void save_data::save_body_state(const Body &b, std::string name, int type){
 	return;
 }
 
-
-/**
- *  A type of interpolation data write for 3D simulation
- *    0:= Only save velocity
- *    1:= Save velocity and vorticity data
- *    2:= Addition of Q criterion data
-*/
-#define INTERPOLATE_3D_TYPE	0
+// Flag parameter
+#define CALCULATE_Q 1       // Flag to calculate Q criterion
+#define CALCULATE_L2 1      // Flag to calculate λ2 criterion
 
 /**
  *  @brief Write the particle properties data of interpolation result.
@@ -145,8 +153,9 @@ void save_data::save_par_interpolation(const Particle &p, std::string name){
 	std::cout << FONT_GREEN << "\nSave interpolation data state " << name << " ..." << FONT_RESET << "\n";
 	
 	// Set up the data writter
+	// SRID stands for "single resolution interpolated data"
 	std::ofstream writeData;
-	name = "outputInterpolate/particle_interpolate_" + name + ".csv";
+	name = "srid/particle_srid_" + name + ".csv";
 	writeData.open(name.c_str());
 	
 	#if (DIM == 2)
@@ -170,97 +179,44 @@ void save_data::save_par_interpolation(const Particle &p, std::string name){
 				  << "\n";
 		}
 	#elif (DIM == 3)
-		// Save the velocity data only
-		if (INTERPOLATE_3D_TYPE == 0){
-			// Save the table header
-			writeData <<  "" << "x"
-					<< "," << "y"
-					<< "," << "z"
-					<< "," << "size"
-					<< "," << "u"
-					<< "," << "v"
-					<< "," << "w"
-					<< "\n";
-			
-			// Save the table data
-			for (int i = 0; i < p.num; i++){
-			writeData <<  "" << p.x[i]
-					<< "," << p.y[i]
-					<< "," << p.z[i]
-					<< "," << p.s[i]
-					<< "," << p.u[i] - Pars::ubody 
-					<< "," << p.v[i] - Pars::vbody
-					<< "," << p.w[i] - Pars::wbody
-					<< "\n";
-			}
-		}
-
-		// Save the velocity and vorticity data
-		else if (INTERPOLATE_3D_TYPE == 1){
-			// Save the table header
-			writeData <<  "" << "x"
-					<< "," << "y"
-					<< "," << "z"
-					<< "," << "size"
-					<< "," << "u"
-					<< "," << "v"
-					<< "," << "w"
-					<< "," << "vortx"
-					<< "," << "vorty"
-					<< "," << "vortz"
-					<< "," << "vor"
-					<< "\n";
-			
-			// Save the table data
-			for (int i = 0; i < p.num; i++){
-			writeData <<  "" << p.x[i]
-					<< "," << p.y[i]
-					<< "," << p.z[i]
-					<< "," << p.s[i]
-					<< "," << p.u[i] - Pars::ubody 
-					<< "," << p.v[i] - Pars::vbody
-					<< "," << p.w[i] - Pars::wbody
-					<< "," << p.vortx[i]
-					<< "," << p.vorty[i]
-					<< "," << p.vortz[i]
-					<< "," << p.vorticity[i]
-					<< "\n";
-			}
-		}
-
-		// Save the velocity, vorticity, and Q criterion data
-		else if (INTERPOLATE_3D_TYPE == 2){
-			// Save the table header
-			writeData <<  "" << "x"
-					<< "," << "y"
-					<< "," << "z"
-					<< "," << "size"
-					<< "," << "u"
-					<< "," << "v"
-					<< "," << "w"
-					<< "," << "vortx"
-					<< "," << "vorty"
-					<< "," << "vortz"
-					<< "," << "vor"
-					<< "," << "Q"
-					<< "\n";
-			
-			// Save the table data
-			for (int i = 0; i < p.num; i++){
-			writeData <<  "" << p.x[i]
-					<< "," << p.y[i]
-					<< "," << p.z[i]
-					<< "," << p.s[i]
-					<< "," << p.u[i] - Pars::ubody 
-					<< "," << p.v[i] - Pars::vbody
-					<< "," << p.w[i] - Pars::wbody
-					<< "," << p.vortx[i]
-					<< "," << p.vorty[i]
-					<< "," << p.vortz[i]
-					<< "," << p.vorticity[i]
-					<< "," << p.P[i]
-					<< "\n";
-			}
+		// Save the table header
+		writeData <<  "" << "x"
+				  << "," << "y"
+				  << "," << "z"
+				  << "," << "size"
+				  << "," << "u"
+				  << "," << "v"
+				  << "," << "w"
+				  << "," << "vortx"
+				  << "," << "vorty"
+				  << "," << "vortz"
+			#if (CALCULATE_Q == 1)
+				  << "," << "Q"
+			#endif
+			#if (CALCULATE_L2 == 1)
+				  << "," << "lamda2"
+			#endif
+				  << "\n";
+		
+		// Save the table data
+		for (int i = 0; i < p.num; i++){
+		writeData <<  "" << p.x[i]
+				  << "," << p.y[i]
+				  << "," << p.z[i]
+				  << "," << p.s[i]
+				  << "," << p.u[i]
+				  << "," << p.v[i]
+				  << "," << p.w[i]
+				  << "," << p.vortx[i]
+				  << "," << p.vorty[i]
+				  << "," << p.vortz[i]
+			#if (CALCULATE_Q == 1)
+				  << "," << p.P[i]
+			#endif
+			#if (CALCULATE_L2 == 1)
+				  << "," << p.R[i]
+			#endif
+				  << "\n";
 		}
 	#endif
 
@@ -289,6 +245,7 @@ void save_data::save_par_interpolation(const Particle &p, std::string name){
  *  @param	_name	Identifier name for saved file.
  * 	@param	_type	Flag to write the particle: [0] save all particle, 
  *  [1] save particle near body only.
+ *  [-1] save the vorticity type.
  * 
  *  @headerfile save_data.hpp
  */
@@ -304,7 +261,8 @@ void save_data::save_par_state(const Particle &p, std::string name, int type)
     #endif
 	
 	// CODE LIES HERE
-	if (N_BODY != 0){
+	// if (Pars::opt_init_vorticity == 0){
+	if (type >= 0){
 		if (DIM == 2){
 			this->save_par_state_2D(p, name, type);
 		}
@@ -312,7 +270,7 @@ void save_data::save_par_state(const Particle &p, std::string name, int type)
 			this->save_par_state_3D(p, name, type);
 		}
 	}else{
-		this->save_par_state_init_vor(p, "solution", type);
+		this->save_par_state_init_vor(p, name, type);
 	}
 	
 	// Display particle write time to console
@@ -337,17 +295,21 @@ void save_data::save_par_state_init_vor(const Particle &p, std::string name, int
 	std::cout << FONT_GREEN << "\nSaving the particle state " << name << " ..." << FONT_RESET << "\n";
 	name = "output/particle_state_" + name + ".csv";
 	writeData.open(name.c_str());
+	writeData.precision(8);
 
 	// Save the table header
 	writeData <<  "" << "xp"
 			  << "," << "yp"
 			  << "," << "sp"
 			  << "," << "vor"
+			//   << "," << "phi_n"
+			//   << "," << "phi_a"
 			  << "," << "un"
  			  << "," << "vn"
 			  << "," << "ua"
  			  << "," << "va"
-			  << "," << "isBoundary";
+			  << "," << "boundaryLoc";
+			//   << "," << "isActive";
 	writeData << "\n";
 
 	// Save whole domain
@@ -357,11 +319,14 @@ void save_data::save_par_state_init_vor(const Particle &p, std::string name, int
 				  << "," << p.y[i]
 				  << "," << p.s[i]
 				  << "," << p.vorticity[i]
+				//   << "," << p.gz[i]
+				//   << "," << p.chi[i]
 				  << "," << p.u[i]
 				  << "," << p.v[i]
 				  << "," << p.gx[i]
 				  << "," << p.gy[i]
-				  << "," << p.isBoundary[i];
+				  << "," << p.boundaryLoc[i];
+				//   << "," << p.isActive[i];
 		writeData << "\n";
 	}
 	
@@ -380,6 +345,7 @@ void save_data::save_par_state_2D(const Particle &p, std::string name, int type)
 	std::cout << FONT_GREEN << "\nSaving the particle state " << name << " ..." << FONT_RESET << "\n";
 	name = "output/particle_state_" + name + ".csv";
 	writeData.open(name.c_str());
+	writeData.precision(12);
 
 	// Save the table header
 	writeData << "" << "xp"

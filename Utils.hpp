@@ -96,6 +96,12 @@ struct Particle{
 	std::vector<double> P;			// Pressure scalar field
 	// Note on [*] : Not gonna used, calculate once and use once in simulation, seem redundant on memory
 
+	// For perlman vorticity neuman
+	std::vector<double> dudx;      // Velocity x differential toward x
+	std::vector<double> dudy;      // Velocity x differential toward y
+	std::vector<double> dvdx;      // Velocity y differential toward x
+	std::vector<double> dvdy;      // Velocity y differential toward y
+
 	// Computational Properties
 	// ************************
 	// Basic computational Properties
@@ -140,8 +146,9 @@ struct Particle{
 	*/
 
 	// // Boundary terms <?> For boundary treatment <?> Not really need for LSMPS
-	std::vector<bool> isBoundary;
-	std::vector<double> boundaryVal;
+	// std::vector<bool> isBoundary;
+	std::vector<int> boundaryLoc;		// The location of boundary [-2: left, -1: bottom, 0: inside, 1:up, 2: right]
+	std::vector<double> boundaryVal;	// The dirichlet value of boundary condition
 	// std::vector<bool> inside; 
 
 	// Constructor
@@ -160,12 +167,22 @@ class simUtil{
 private:
 	int iterDigitLen;
 public:
+	// Displaying and utilities calculation
+
 	void startCounter(int step);
 	void printHeader(int step);
-	void predictCompTime(int step, double _currTime);
 	std::string saveName(const int step);
-	void stabilityEval(const Particle &_particle, std::vector<double> &_maxValue);
+	void predictCompTime(int step, double _currTime);
+
+	// Saving and Evaluation Function
+
+	void stabilityEval(const Particle &_particle, 
+					   std::vector<double*> &_maxValue, 
+					   const int &step);
 	void saveResidual(Particle &_particle, int step);
+	void saveCompTime(int step, double _currTime);
+
+	void addVorPertubation(Particle &_particle);
 };
 
 #endif
